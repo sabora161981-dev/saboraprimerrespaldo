@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Logo Profesional - Sabora</title>
+
+<style>
+
+body{
+    background:#efe7e2;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    height:100vh;
+
+    margin:0;
+
+    font-family:'Segoe UI',sans-serif;
+}
+
+.card{
+
+    background:white;
+
+    padding:30px;
+
+    border-radius:20px;
+
+    text-align:center;
+
+    width:340px;
+
+    box-shadow:
+    0 10px 25px rgba(0,0,0,.1);
+
+}
+
+.logo{
+
+    position:relative;
+
+    width:180px;
+
+    height:180px;
+
+    margin:auto;
+
+    transition:.5s;
+
+}
+
+.logo:hover{
+
+    transform:
+    scale(1.05);
+
+}
+
+.circle-center{
+
+    width:90px;
+
+    height:90px;
+
+    background:
+    linear-gradient(
+    135deg,
+    #ff7a3d,
+    #ff6b2c
+    );
+
+    border-radius:50%;
+
+    position:absolute;
+
+    top:45px;
+
+    left:45px;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    font-size:34px;
+
+    color:white;
+
+    box-shadow:
+    0 10px 20px rgba(255,107,44,.4);
+
+}
+
+h3{
+
+    margin-top:18px;
+
+    font-size:15px;
+
+    color:#444;
+
+}
+
+.btn{
+
+    width:100%;
+
+    padding:12px;
+
+    border-radius:12px;
+
+    border:none;
+
+    cursor:pointer;
+
+    margin-top:10px;
+
+    font-size:14px;
+
+    transition:.3s;
+
+}
+
+.btn:hover{
+
+    transform:
+    translateY(-2px);
+
+}
+
+.btn-primary{
+
+    background:#ff6b2c;
+
+    color:white;
+
+}
+
+.btn-secondary{
+
+    background:white;
+
+    color:#ff6b2c;
+
+    border:2px solid #ff6b2c;
+
+}
+
+.qr-container{
+
+    margin-top:15px;
+
+}
+
+.qr-container p{
+
+    color:#666;
+
+    font-size:12px;
+
+}
+
+#qr{
+
+    display:flex;
+
+    justify-content:center;
+
+    transition:.4s;
+    }
+
+#qr:hover{
+
+transform:scale(1.08);
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<div class="logo">
+
+<svg width="180" height="180" viewBox="0 0 180 180">
+
+<defs>
+
+<path id="topArc"
+d="M 90,90
+m -70,0
+a 70,70 0 1,1 140,0"/>
+
+<path id="bottomArc"
+d="M 90,90
+m -70,0
+a 70,70 0 1,0 140,0"/>
+
+</defs>
+
+<!-- TEXTO SUPERIOR -->
+<text
+fill="#ff6b2c"
+font-size="11"
+letter-spacing="2">
+
+<textPath
+href="#topArc"
+startOffset="50%"
+text-anchor="middle">
+
+NO ES UNA EXPERIENCIA
+
+</textPath>
+
+</text>
+
+<!-- TEXTO INFERIOR -->
+<text
+fill="#ff6b2c"
+font-size="11"
+letter-spacing="3">
+
+<textPath
+href="#bottomArc"
+startOffset="50%"
+text-anchor="middle">
+
+ES SABORA
+
+</textPath>
+
+</text>
+
+</svg>
+
+<div class="circle-center">
+🍴
+</div>
+
+</div>
+
+<!-- QR -->
+<div class="qr-container">
+
+<div id="qr"></div>
+
+<p>Escanea para iniciar sesión</p>
+
+</div>
+
+<h3>
+Sistema de Gestión de Restaurante
+</h3>
+
+<button
+class="btn btn-primary"
+onclick="window.location.href='registro.php'">
+
+Registrarse
+
+</button>
+
+<button
+class="btn btn-secondary"
+onclick="window.location.href='login.php'">
+
+Iniciar Sesión
+
+</button>
+
+</div>
+
+<!-- Librería QR -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script>
+
+new QRCode(
+document.getElementById("qr"),
+{
+
+text:"http://192.168.101.71/sabora/inicio.html",
+
+width:120,
+
+height:120,
+
+colorDark:"#ff6b2c",
+
+colorLight:"#ffffff"
+
+}
+
+);
+
+</script>
+
+</body>
+
+</html>

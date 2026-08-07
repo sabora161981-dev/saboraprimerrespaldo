@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login Cajero - Sabora</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+    font-family:'Segoe UI',sans-serif;
+}
+
+body{
+    margin:0;
+    background:#efe6df;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+/* CONTENEDOR */
+
+.container{
+    width:340px;
+    background:#f4f4f4;
+    padding:30px;
+    border-radius:18px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.08);
+    text-align:center;
+}
+
+/* LOGO */
+
+.logo-container{
+    margin-bottom:18px;
+}
+
+/* TITULO */
+
+.title{
+    font-size:16px;
+    color:#555;
+    margin-bottom:20px;
+}
+
+/* HEADER */
+
+.user-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+    font-size:13px;
+}
+
+.change{
+    color:#ff7a3d;
+    text-decoration:none;
+    font-weight:600;
+}
+
+.change:hover{
+    text-decoration:underline;
+}
+
+/* TIPO USUARIO */
+
+.user-type{
+    border:2px solid #ff7a3d;
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:18px;
+    font-size:14px;
+    font-weight:bold;
+    background:white;
+}
+
+/* LABELS */
+
+label{
+    display:block;
+    text-align:left;
+    margin-bottom:5px;
+    font-size:13px;
+    color:#444;
+}
+
+/* INPUTS */
+
+input{
+    width:100%;
+    padding:11px;
+    border-radius:10px;
+    border:1px solid #ddd;
+    margin-bottom:16px;
+    font-size:14px;
+}
+
+input:focus{
+    outline:none;
+    border-color:#ff7a3d;
+}
+
+/* BOTON */
+
+button{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:10px;
+    background:#ff7a3d;
+    color:white;
+    font-weight:bold;
+    font-size:14px;
+    cursor:pointer;
+    transition:0.3s;
+}
+
+button:hover{
+    background:#e5672f;
+}
+
+/* LINK */
+
+.link{
+    margin-top:15px;
+    font-size:13px;
+    color:#ff7a3d;
+    cursor:pointer;
+}
+
+.link:hover{
+    text-decoration:underline;
+}
+
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- LOGO -->
+    <div class="logo-container">
+
+        <svg width="140" height="140" viewBox="0 0 140 140">
+
+            <defs>
+
+                <!-- CURVA SUPERIOR -->
+                <path id="topCurve"
+                      d="M 20 70
+                         A 50 50 0 0 1 120 70" />
+
+                <!-- CURVA INFERIOR -->
+                <path id="bottomCurve"
+                      d="M 20 70
+                         A 50 50 0 0 0 120 70" />
+
+            </defs>
+
+            <!-- TEXTO SUPERIOR -->
+            <text fill="#ff7a3d"
+                  font-size="8"
+                  font-weight="bold"
+                  letter-spacing="2">
+
+                <textPath href="#topCurve"
+                          startOffset="50%"
+                          text-anchor="middle">
+
+                    NO ES UNA EXPERIENCIA
+
+                </textPath>
+
+            </text>
+
+            <!-- TEXTO INFERIOR -->
+            <text fill="#ff7a3d"
+                  font-size="8"
+                  font-weight="bold"
+                  letter-spacing="3">
+
+                <textPath href="#bottomCurve"
+                          startOffset="50%"
+                          text-anchor="middle">
+
+                    ES SABORA
+
+                </textPath>
+
+            </text>
+
+            <!-- CIRCULO CENTRAL -->
+            <circle cx="70" cy="70" r="28" fill="#ff7a3d"/>
+
+            <!-- ICONO -->
+            <text x="70"
+                  y="77"
+                  text-anchor="middle"
+                  font-size="20"
+                  fill="black">
+
+                🍴
+
+            </text>
+
+        </svg>
+
+    </div>
+
+    <!-- TITULO -->
+    <div class="title">
+        Inicia sesión en tu cuenta
+    </div>
+
+    <!-- HEADER -->
+    <div class="user-header">
+
+        <span>Tipo de Usuario *</span>
+
+        <a href="login.php" class="change">
+            ← Cambiar
+        </a>
+
+    </div>
+
+    <!-- TIPO -->
+    <div class="user-type">
+        Cajero
+    </div>
+
+    <!-- FORMULARIO -->
+    <form action="validar_login.php" method="POST">
+        
+    <input type="hidden" name="tipo_login" value="cajero">
+    
+
+    <label>Correo Electrónico o Usuario</label>
+
+    <input type="text"
+           name="correo"
+           required>
+
+    <label>Contraseña</label>
+
+    <input
+        type="password"
+        name="clave"
+        required>
+
+    <!-- BOTON -->
+
+    <button type="submit">
+        Iniciar Sesión
+    </button>
+</form>
+    <!-- LINK -->
+
+    <div class="link"
+         onclick="window.location.href='registro.html'">
+
+        ¿No tienes una cuenta? Regístrate aquí
+
+    </div>
+
+</div>
+
+</body>
+</html>
