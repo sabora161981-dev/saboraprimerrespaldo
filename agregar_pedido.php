@@ -11,11 +11,20 @@ if (isset($_POST['id_producto'])) {
 
     $idProducto = intval($_POST['id_producto']);
 
-    // Agregar el producto al pedido
-    $_SESSION['pedido'][] = $idProducto;
+    // Verificar si el producto ya está en el pedido
+    if (isset($_SESSION['pedido'][$idProducto])) {
+
+        $_SESSION['pedido'][$idProducto]['cantidad']++;
+
+    } else {
+
+        $_SESSION['pedido'][$idProducto] = [
+            "cantidad" => 1
+        ];
+
+    }
 }
 
 // Regresar al menú
 header("Location: menu.php");
 exit();
-?>

@@ -3,7 +3,7 @@ session_start();
 include("conexion.php");
 
 //==============================
-// PEDIDO ACTUAL
+// AGREGA PEDIDO
 //==============================
 
 if (!isset($_SESSION['pedido'])) {
@@ -599,7 +599,7 @@ Disponibles:
         value="<?php echo $fila['idProducto']; ?>">
 
     <button type="submit">
-        Agregar al pedido
+     Agregar al pedido
     </button>
 
 </form>
@@ -632,7 +632,6 @@ BOTÓN FLOTANTE PEDIDO
 
 <div id="pedidoFlotante">
 
-    <span id="cerrarPedido">&times;</span>
 
     <span class="icono">🛒</span>
 
@@ -650,7 +649,7 @@ const boton = document.getElementById("pedidoFlotante");
 
 let mover = false;
 
-let offsetX = 0;
+let offsetX = 10;
 let offsetY = 0;
 
 boton.addEventListener("mousedown", function(e){

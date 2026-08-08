@@ -231,5 +231,6 @@ footer{
    </div>
    <?php include("includes/footer.php"); ?>
     </footer>
+    
     </body>
     </html>
