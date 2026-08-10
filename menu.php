@@ -1,619 +1,1283 @@
 <?php
 session_start();
-include("conexion.php");
 
-//==============================
-// AGREGA PEDIDO
-//==============================
+require_once "conexion.php";
+
+/*
+|--------------------------------------------------------------------------
+| INICIALIZAR PEDIDO
+|--------------------------------------------------------------------------
+*/
 
 if (!isset($_SESSION['pedido'])) {
     $_SESSION['pedido'] = [];
 }
 
-$cantidadProductos = count($_SESSION['pedido']);
 
-//==============================
-// VALIDAR SESION
-//==============================
+/*
+|--------------------------------------------------------------------------
+| AGREGAR PRODUCTO AL PEDIDO
+|--------------------------------------------------------------------------
+|
+| Esta es la adaptación de la lógica addToCart() del código original.
+|
+| Si el producto ya existe:
+|     cantidad + 1
+|
+| Si no existe:
+|     se agrega con cantidad 1
+|
+*/
 
-if (!isset($_SESSION['correo'])) {
-    header("Location: Cliente.html");
-    exit();
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['id_producto'])) {
+
+    $idProducto = (int) $_POST['id_producto'];
+
+    if ($idProducto > 0) {
+
+        /*
+        | Buscar el producto en la base de datos
+        */
+        $sqlProducto = "
+            SELECT
+                idProducto,
+                nombre,
+                descripcion,
+                precio,
+                imagen,
+                categoria,
+                stock
+            FROM producto
+            WHERE idProducto = ?
+        ";
+
+        $stmtProducto = mysqli_prepare(
+            $conexion,
+            $sqlProducto
+        );
+
+        mysqli_stmt_bind_param(
+            $stmtProducto,
+            "i",
+            $idProducto
+        );
+
+        mysqli_stmt_execute($stmtProducto);
+
+        $resultadoProducto =
+            mysqli_stmt_get_result($stmtProducto);
+
+
+        /*
+        | Verificar que el producto exista
+        */
+        if ($filaProducto = mysqli_fetch_assoc($resultadoProducto)) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | BUSCAR SI YA EXISTE EN EL PEDIDO
+            |--------------------------------------------------------------------------
+            */
+
+            $productoEncontrado = false;
+
+            foreach ($_SESSION['pedido'] as $indice => $producto) {
+
+                if ((int)$producto['idProducto'] === $idProducto) {
+
+                    /*
+                    | El producto ya existe.
+                    | Aumentamos solamente la cantidad.
+                    */
+
+                    $_SESSION['pedido'][$indice]['cantidad']++;
+
+                    $productoEncontrado = true;
+
+                    break;
+                }
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | SI NO EXISTE, AGREGARLO
+            |--------------------------------------------------------------------------
+            */
+
+            if (!$productoEncontrado) {
+
+                $_SESSION['pedido'][] = [
+
+                    'idProducto' => $filaProducto['idProducto'],
+
+                    'nombre' => $filaProducto['nombre'],
+
+                    'descripcion' => $filaProducto['descripcion'],
+
+                    'precio' => $filaProducto['precio'],
+
+                    'imagen' => $filaProducto['imagen'],
+
+                    'categoria' => $filaProducto['categoria'],
+
+                    'cantidad' => 1
+
+                ];
+            }
+        }
+
+        mysqli_stmt_close($stmtProducto);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | EVITAR QUE AL ACTUALIZAR LA PÁGINA SE VUELVA A AGREGAR
+    |--------------------------------------------------------------------------
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESPUESTA PARA EL CARRITO FLOTANTE
+    |--------------------------------------------------------------------------
+    |
+    | Cuando el botón "Agregar al pedido" se pulsa desde JavaScript,
+    | devolvemos el pedido actualizado en JSON.
+    |
+    | Si la solicitud no es AJAX, conservamos la redirección normal.
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        isset($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
+    ) {
+
+        $cantidadProductosRespuesta = 0;
+        $totalPedidoRespuesta = 0;
+        $itemsPedidoRespuesta = [];
+
+        foreach ($_SESSION['pedido'] as $productoPedido) {
+
+            $cantidadProducto =
+                (int)$productoPedido['cantidad'];
+
+            $precioProducto =
+                (float)$productoPedido['precio'];
+
+            $cantidadProductosRespuesta +=
+                $cantidadProducto;
+
+            $totalPedidoRespuesta +=
+                $precioProducto * $cantidadProducto;
+
+            $itemsPedidoRespuesta[] = [
+                'nombre' =>
+                    $productoPedido['nombre'],
+
+                'precio' =>
+                    $precioProducto,
+
+                'cantidad' =>
+                    $cantidadProducto,
+
+                'imagen' =>
+                    $productoPedido['imagen']
+            ];
+        }
+
+        header(
+            'Content-Type: application/json; charset=utf-8'
+        );
+
+        echo json_encode([
+            'ok' => true,
+            'cantidadProductos' =>
+                $cantidadProductosRespuesta,
+            'totalPedido' =>
+                $totalPedidoRespuesta,
+            'items' =>
+                $itemsPedidoRespuesta
+        ]);
+
+        exit;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | EVITAR QUE AL ACTUALIZAR LA PÁGINA SE VUELVA A AGREGAR
+    |--------------------------------------------------------------------------
+    */
+
+    header("Location: menu.php");
+    exit;
 }
 
-if (strtolower($_SESSION['rol']) != "cliente") {
-    header("Location: Cliente.html");
-    exit();
+
+/*
+|--------------------------------------------------------------------------
+| CANTIDAD TOTAL DE PRODUCTOS
+|--------------------------------------------------------------------------
+|
+| Ejemplo:
+|
+| Hamburguesa x 3
+| Pizza        x 2
+|
+| contador = 5
+|
+*/
+
+$cantidadProductos = 0;
+
+foreach ($_SESSION['pedido'] as $producto) {
+
+    $cantidadProductos +=
+        (int)$producto['cantidad'];
 }
-//==============================
-// INICIALES DEL AVATAR
-//==============================
 
-$iniciales =
-strtoupper(substr($_SESSION['nombre'],0,1)).
-strtoupper(substr($_SESSION['apellido'],0,1));
 
-//==============================
-// DATOS DEL USUARIO
-//==============================
+/*
+|--------------------------------------------------------------------------
+| CONSULTAR PRODUCTOS
+|--------------------------------------------------------------------------
+*/
 
-$nombre = $_SESSION['nombre'];
-$apellido = $_SESSION['apellido'];
+$sql = "
+    SELECT
+        idProducto,
+        nombre,
+        descripcion,
+        precio,
+        imagen,
+        categoria,
+        stock
+    FROM producto
+    ORDER BY idProducto DESC
+";
 
-//==============================
-// CONSULTAR PRODUCTOS
-//==============================
+$resultado = mysqli_query(
+    $conexion,
+    $sql
+);
 
-$sql = "SELECT *
-        FROM producto
-        WHERE estado='Activo'
-        AND stock>0
-        ORDER BY categoria,nombre";
-
-$resultado = mysqli_query($conexion,$sql);
 ?>
-
 <!DOCTYPE html>
+
 <html lang="es">
 
 <head>
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
 
-<title>Menú - Sabora</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
 
-<style>
+    <title>Sabora - Menú</title>
 
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:'Segoe UI',sans-serif;
-}
 
-body{
-    background:#efe6df;
-}
+    <style>
 
-/*==============================*/
-/* HEADER */
-/*==============================*/
+        * {
+            box-sizing: border-box;
+        }
 
-header{
 
-    background:#ff7a3d;
-    color:white;
-    padding:20px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
+        body {
 
-}
+            margin: 0;
 
-header h1{
-    font-size:28px;
-}
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
 
-.usuario{
+            background: #f5ede6;
 
-    text-align:right;
-    font-size:15px;
+            color: #333;
+        }
 
-}
-/*============avatar superrior==================*/
-.avatar{
 
-    width:55px;
-    height:55px;
+        /*
+        |--------------------------------------------------------------------------
+        | ENCABEZADO
+        |--------------------------------------------------------------------------
+        */
 
-    border-radius:0%;
+        header {
 
-    background:white;
-    color:#ff7a3d;
+            background: white;
 
+            padding: 20px;
 
-    display:flex;
-    justify-content:center;
-    align-items:center;
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,0.10);
 
+            position: sticky;
 
-    font-size:22px;
-    font-weight:bold;
-    
+            top: 0;
 
-    margin-left:auto;
-    margin-bottom:10px;
+            z-index: 100;
+        }
 
-    box-shadow:0 3px 8px rgba(0,0,0,.15);
 
-}
+        .header-content {
 
-/*==============================*/
+            max-width: 1200px;
 
-.contenedor{
+            margin: auto;
 
-    width:95%;
-    max-width:1200px;
-    margin:40px auto;
+            display: flex;
 
-}
+            align-items: center;
 
-.titulo{
+            justify-content: space-between;
+        }
 
-    color:#ff6b35;
-    margin-bottom:30px;
 
-}
+        .logo {
 
-/*==============================*/
-.pedido-actual{
+            display: flex;
 
-    background:white;
-    border-radius:15px;
-    padding:20px;
-    margin-bottom:30px;
+            align-items: center;
 
-    box-shadow:0 4px 12px rgba(0,0,0,.15);
+            gap: 12px;
+        }
 
-}
 
-.pedido-actual h3{
+        .logo-icon {
 
-    color:#ff6b35;
-    margin-bottom:10px;
+            width: 50px;
 
-}
+            height: 50px;
 
-.pedido-actual p{
+            border-radius: 50%;
 
-    font-size:18px;
+            background: #ff6b35;
 
-}
+            display: flex;
 
+            align-items: center;
 
-.productos{
+            justify-content: center;
 
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-    gap:25px;
+            font-size: 25px;
+        }
 
-}
 
-/*==============================*/
+        .logo h1 {
 
-.card{
+            margin: 0;
 
-    background:white;
-    border-radius:15px;
-    padding: 20px;
+            color: #ff6b35;
 
-    box-shadow:0 4px 12px rgba(0,0,0,.15);
+            font-size: 28px;
+        }
 
-    transition:.3s;
 
-    display:flex;
-    flex-direction:column;
+        .logo p {
 
-    min-height:480px; /* puedes ajustar entre 350 y 380 */
+            margin: 3px 0 0;
 
-}
+            color: #777;
 
-/*==============================*/
-/* IMAGEN DEL PRODUCTO */
-/*==============================*/
+            font-size: 14px;
+        }
 
-.imagen-producto{
 
-    width:100%;
-    height:180px;
+        /*
+        |--------------------------------------------------------------------------
+        | CARRITO
+        |--------------------------------------------------------------------------
+        */
 
-    margin-bottom:15px;
+        .pedido-resumen {
 
-    border-radius:12px;
+            display: flex;
 
-    overflow:hidden;
+            align-items: center;
 
-}
+            gap: 10px;
+        }
 
-.imagen-producto img{
 
-    width:100%;
-    height:100%;
+        .carrito {
 
-    object-fit:contain;
+            position: relative;
 
-}
+            width: 48px;
 
-.sin-imagen{
+            height: 48px;
 
-    width:100%;
-    height:100%;
+            border-radius: 50%;
 
-    display:flex;
-    justify-content:center;
-    align-items:center;
+            background: #ff6b35;
 
-    border:2px dashed #d9d9d9;
+            color: white;
 
-    border-radius:12px;
+            display: flex;
 
-    background:#f8f8f8;
+            align-items: center;
 
-    color:#999;
+            justify-content: center;
 
-    font-size:18px;
+            text-decoration: none;
 
-    font-weight:bold;
+            font-size: 23px;
+        }
 
-}
 
-.card form{
-    margin-top:auto;
-    width:100%;
-}
+        #contadorPedido {
 
-.card:hover{
+            position: absolute;
 
-    transform:translateY(-5px);
+            top: -5px;
 
-}
+            right: -5px;
 
-.card h2{
+            width: 24px;
 
-    color:#ff6b35;
-    font-size:20px;
+            height: 24px;
 
-    height:52px;
+            border-radius: 50%;
 
-    display:flex;
-    align-items:flex-start;
+            background: #333;
 
-    margin-bottom:10px;
-}
+            color: white;
 
-.descripcion{
+            display: flex;
 
-    color:#666;
-    height:50px;      /* misma altura para todos */
-    overflow:hidden;
-    margin-bottom:15px
-}
+            align-items: center;
 
-.info{
+            justify-content: center;
 
-    margin:8px 0;
+            font-size: 12px;
 
-}
+            font-weight: bold;
+        }
 
-.precio{
 
-    font-size:22px;
-    font-weight:bold;
-    color:#2e7d32;
+        /*
+        |--------------------------------------------------------------------------
+        | CATEGORÍAS
+        |--------------------------------------------------------------------------
+        */
 
-}
+        .categorias {
 
-.stock{
+            background: white;
 
-    color:#555;
+            padding: 15px;
 
-}
+            border-bottom:
+                1px solid #ddd;
+        }
 
-.categoria{
 
-    color:#777;
+        .categorias-contenedor {
 
-}
+            max-width: 1200px;
 
+            margin: auto;
 
+            display: flex;
 
-button{
+            gap: 10px;
 
-    width:100%;
-    margin-top:20px;
+            overflow-x: auto;
+        }
 
-    padding:12px;
 
-    border:none;
-    border-radius:8px;
+        .categoria {
 
-    background:#ff6b35;
-    color:white;
+            border: none;
 
-    cursor:pointer;
+            background: #eee;
 
-    font-size:15px;
+            padding: 10px 18px;
 
-}
+            border-radius: 10px;
 
-button:hover{
+            cursor: pointer;
 
-    background:#e85a2a;
+            white-space: nowrap;
+        }
 
-}
 
-/*==============================*/
+        .categoria:hover {
 
-.botones{
+            background: #ffddd0;
+        }
 
-    margin-top:40px;
-    text-align:center;
 
-}
+        /*
+        |--------------------------------------------------------------------------
+        | CONTENIDO
+        |--------------------------------------------------------------------------
+        */
 
-.botones a{
+        main {
 
-    text-decoration:none;
+            max-width: 1200px;
 
-}
+            margin: auto;
 
-.volver{
+            padding: 30px 20px 80px;
+        }
 
 
-    width:220px;
+        .pedido-actual {
 
+            background: white;
 
-}
-/*==============================*/
-/* FOOTER */
-/*==============================*/
+            border-radius: 15px;
 
-footer{
+            padding: 18px;
 
-    text-align:center;
-    color:#666;
-    font-size:15px;
-    margin:40px;
+            margin-bottom: 25px;
 
+            box-shadow:
+                0 3px 10px
+                rgba(0,0,0,0.08);
+        }
 
 
-}
+        .pedido-actual h3 {
 
-/*========logo superior con avatar desde 260 hasta linea 294======================*/
-/*==================================
-BOTÓN FLOTANTE PEDIDO
-==================================*/
+            margin-top: 0;
 
-#pedidoFlotante{
+            color: #ff6b35;
+        }
 
-    position:fixed;
 
-    right:25px;
-    bottom:25px;
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUCTOS
+        |--------------------------------------------------------------------------
+        */
 
-    width:70px;
-    height:70px;
+        .productos {
 
-    background:#ff6b35;
+            display: grid;
 
-    border-radius:0;
+            grid-template-columns:
+                repeat(3, 1fr);
 
-    display:flex;
-    justify-content:center;
-    align-items:center;
+            gap: 25px;
+        }
 
-    cursor:pointer;
 
-    box-shadow:0 8px 20px rgba(0,0,0,.30);
+        .producto {
 
-    z-index:9999;
+            background: white;
 
-     transition:
-        transform .2s ease,
-        box-shadow .2s ease;
+            border-radius: 18px;
 
-    user-select:none;
+            overflow: hidden;
 
-}
+            box-shadow:
+                0 5px 15px
+                rgba(0,0,0,0.10);
+        }
 
-#pedidoFlotante:hover{
 
-    transform:scale(1.08);
+        .producto img {
 
-}
+            width: 100%;
+            height: 150px;
+            object-fit: contain;
+            display: block;
+            background: #fff;
+            padding: 10px;
 
-.icono{
+            border: 2px solid #f0e0d5;
 
-    font-size:30px;
-    color:white;
+            border-radius: 12px;
+        }
 
-}
 
-#contadorPedido{
+        .sin-imagen {
+             width: 100%;
+             height: 100%;
 
-    position:absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-    top:-4px;
+            color: #777;
+        }
 
-    right:-4px;
 
-    width:24px;
+        .producto-info {
 
-    height:24px;
+            padding: 20px;
+        }
 
-    background:#d32f2f;
 
-    color:white;
+        .producto-info h3 {
 
-    border-radius:50%;
+            margin:
+                0 0 10px;
 
-    display:flex;
+            font-size: 19px;
+        }
 
-    justify-content:center;
 
-    align-items:center;
+        .descripcion {
 
-    font-size:12px;
+            color: #666;
 
-    font-weight:bold;
+            font-size: 14px;
 
-    border:2px solid white;
+            line-height: 1.5;
 
-}
+            min-height: 45px;
+        }
 
-/*==================================
-BOTÓN CERRAR PEDIDO
-==================================*/
 
-#cerrarPedido{
+        .precio {
 
-    position:absolute;
+            color: #ff6b35;
 
-    top:-4px;
-    left:-4px;
+            font-size: 20px;
 
-    width:24px;
-    height:24px;
+            font-weight: bold;
 
-    background:#d32f2f;
+            margin: 10px 0;
+        }
 
-    color:white;
 
-    border-radius:50%;
+        .disponible {
 
-    display:flex;
-    justify-content:center;
-    align-items:center;
+            color: #555;
 
-    font-size:14px;
+            font-size: 14px;
 
-    font-weight:bold;
+            margin-bottom: 15px;
+        }
 
-    cursor:pointer;
 
-    border:2px solid white;
+        /*
+        |--------------------------------------------------------------------------
+        | FORMULARIO AGREGAR
+        |--------------------------------------------------------------------------
+        */
 
-    box-shadow:0 2px 8px rgba(0,0,0,.30);
+        .form-pedido {
 
-    transition:.2s;
+            margin-top: 15px;
+        }
 
-}
 
-#cerrarPedido:hover{
+        .btn-agregar {
 
-    background:#b71c1c;
+            width: 100%;
 
-    transform:scale(1.15);
+            border: none;
 
-}
-</style>
+            padding: 12px;
+
+            border-radius: 10px;
+
+            background: #ff6b35;
+
+            color: white;
+
+            font-size: 15px;
+
+            cursor: pointer;
+        }
+
+
+        .btn-agregar:hover {
+
+            background: #e85a2a;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | BOTÓN VOLVER
+        |--------------------------------------------------------------------------
+        */
+
+        .volver {
+
+            display: block;
+
+            margin:
+                30px auto 0;
+
+            border: none;
+
+            padding: 12px 25px;
+
+            border-radius: 10px;
+
+            background: #ff6b35;
+
+            color: white;
+
+            cursor: pointer;
+        }
+
+
+        .volver:hover {
+
+            background: #e85a2a;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CARRITO FLOTANTE
+        |--------------------------------------------------------------------------
+        */
+
+        .carrito-flotante {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: min(400px, 92vw);
+            height: 100vh;
+            background: white;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.20);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(105%);
+            transition: transform 0.30s ease;
+        }
+
+        .carrito-flotante.abierto {
+            transform: translateX(0);
+        }
+
+        .carrito-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            z-index: 999;
+            display: none;
+        }
+
+        .carrito-overlay.abierto {
+            display: block;
+        }
+
+        .carrito-flotante-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            background: #ff6b35;
+            color: white;
+        }
+
+        .carrito-flotante-header h2 {
+            margin: 0;
+            font-size: 21px;
+        }
+
+        .cerrar-carrito {
+            border: none;
+            background: transparent;
+            color: white;
+            font-size: 30px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .carrito-contenido {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .carrito-vacio {
+            text-align: center;
+            color: #777;
+            padding: 40px 15px;
+        }
+
+        .carrito-item {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .carrito-item-img {
+            width: 65px;
+            height: 65px;
+            border-radius: 10px;
+            border: 1px solid #f0e0d5;
+            background: #fff;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .carrito-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .carrito-item-nombre {
+            margin: 0 0 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .carrito-item-cantidad {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .carrito-item-precio {
+            margin-top: 4px;
+            color: #ff6b35;
+            font-weight: bold;
+        }
+
+        .carrito-flotante-footer {
+            padding: 18px;
+            border-top: 1px solid #ddd;
+            background: #fff;
+        }
+
+        .carrito-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 19px;
+            font-weight: bold;
+        }
+
+        .carrito-total-valor {
+            color: #ff6b35;
+        }
+
+        .btn-ver-pedido {
+            display: block;
+            width: 100%;
+            padding: 13px;
+            border-radius: 10px;
+            background: #ff6b35;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .btn-ver-pedido:hover {
+            background: #e85a2a;
+        }
+
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | RESPONSIVE
+        |--------------------------------------------------------------------------
+        */
+
+        @media (max-width: 900px) {
+
+            .productos {
+
+                grid-template-columns:
+                    repeat(2, 1fr);
+            }
+        }
+
+
+        @media (max-width: 600px) {
+
+            .header-content {
+
+                flex-direction: column;
+
+                gap: 15px;
+            }
+
+
+            .productos {
+
+                grid-template-columns: 1fr;
+            }
+
+
+            main {
+
+                padding:
+                    20px 15px 70px;
+            }
+
+        }
+
+    </style>
 
 </head>
 
+
 <body>
 
-<?php include("includes/header_cliente.php"); ?>
 
-<div class="contenedor">
+<!-- =====================================================
+     ENCABEZADO
+===================================================== -->
 
-<h2 class="titulo">Nuestro Menú</h2>
+<header>
 
-<div class="pedido-actual">
+    <div class="header-content">
 
-    <h3>🛒 Pedido Actual</h3>
+        <div class="logo">
 
-    <p>
-        Productos seleccionados:
-        <strong><?php echo $cantidadProductos; ?></strong>
-    </p>
+            <div class="logo-icon">
+                🍴
+            </div>
 
-</div>
+            <div>
 
-<div class="productos">
+                <h1>
+                    Sabora
+                </h1>
 
-<?php
+                <p>
+                    Menú del Restaurante
+                </p>
 
-while($fila=mysqli_fetch_assoc($resultado)){
+            </div>
 
-?>
-
-<div class="card">
+        </div>
 
 
- <!-- FOTO DEL PRODUCTO -->
+        <!-- =================================================
+             CARRITO
+        ================================================== -->
 
-<div class="imagen-producto">
 
-<?php
-
-if (!empty($fila['imagen'])) {
-
-?>
-
-    <img
-        src="<?= $fila['imagen']; ?>"
-        alt="<?= $fila['nombre']; ?>">
-
-<?php
-
-}else{
-
-?>
-
-    <div class="sin-imagen">
-        Sin foto
     </div>
 
-<?php
+</header>
 
-}
 
-?>
 
-</div>
+<!-- =====================================================
+     CATEGORÍAS
+===================================================== -->
 
-<h2><?php echo ucfirst($fila['nombre']); ?></h2>
+<div class="categorias">
 
-<p class="descripcion">
+    <div class="categorias-contenedor">
 
-<?php echo ucfirst($fila['descripcion']); ?>
+        <button class="categoria">
+            Todos
+        </button>
 
-</p>
+        <button class="categoria">
+            Comidas
+        </button>
 
-<p class="info categoria">
+        <button class="categoria">
+            Bebidas
+        </button>
 
-Categoría:
-<b><?php echo ucfirst($fila['categoria']); ?></b>
+        <button class="categoria">
+            Helados
+        </button>
 
-</p>
+        <button class="categoria">
+            Adiciones
+        </button>
 
-<p class="precio">
-
-$ <?php echo number_format($fila['precio'],0,",","."); ?>
-
-</p>
-
-<p class="stock">
-
-Disponibles:
-<b><?php echo $fila['stock']; ?></b>
-
-</p>
-
-<form action="agregar_pedido.php" method="POST">
-
-    <input
-        type="hidden"
-        name="id_producto"
-        value="<?php echo $fila['idProducto']; ?>">
-
-    <button type="submit">
-     Agregar al pedido
-    </button>
-
-</form>
-</div>
-
-<?php
-
-}
-
-?>
+    </div>
 
 </div>
 
-<div class="botones">
+
+
+<!-- =====================================================
+     CONTENIDO
+===================================================== -->
+
+    <!-- =====================================================
+         CARRITO FLOTANTE
+    ====================================================== -->
+
+    <div
+        id="carritoOverlay"
+        class="carrito-overlay"
+        onclick="cerrarCarrito()">
+    </div>
+
+    <aside
+        id="carritoFlotante"
+        class="carrito-flotante"
+        aria-hidden="true">
+
+        <div class="carrito-flotante-header">
+
+            <h2>🛒 Mi pedido</h2>
+
+            <button
+                type="button"
+                class="cerrar-carrito"
+                onclick="cerrarCarrito()"
+                aria-label="Cerrar carrito">
+                &times;
+            </button>
+
+        </div>
+
+        <div
+            id="carritoContenido"
+            class="carrito-contenido">
+
+            <div class="carrito-vacio">
+                No hay productos en el pedido.
+            </div>
+
+        </div>
+
+        <div class="carrito-flotante-footer">
+
+            <div class="carrito-total">
+
+                <span>Total</span>
+
+                <span
+                    id="carritoTotal"
+                    class="carrito-total-valor">
+                    $0
+                </span>
+
+            </div>
+
+            <a
+                href="carrito.php"
+                class="btn-ver-pedido">
+                Ver pedido
+            </a>
+
+        </div>
+
+    </aside>
+
+
+<main>
+
+
+    <!-- =================================================
+         PEDIDO ACTUAL
+    ================================================== -->
+
+    <div class="pedido-actual">
+
+        <h3>
+            🛒 Pedido Actual
+        </h3>
+
+        <p>
+
+            Productos seleccionados:
+
+            <strong>
+
+                <?php
+                echo $cantidadProductos;
+                ?>
+
+            </strong>
+
+        </p>
+
+    </div>
+
+
+
+    <!-- =================================================
+         PRODUCTOS
+    ================================================== -->
+
+    <div class="productos">
+
+
+        <?php
+
+        if ($resultado && mysqli_num_rows($resultado) > 0) {
+
+            while ($fila = mysqli_fetch_assoc($resultado)) {
+
+        ?>
+
+
+            <div class="producto">
+
+
+                <!-- IMAGEN -->
+
+                <?php if (!empty($fila['imagen'])): ?>
+
+                <div class="producto-img-container">
+                 
+                    <img
+                        src="<?= htmlspecialchars($fila['imagen']); ?>"
+                        alt="<?= htmlspecialchars($fila['nombre']); ?>">
+                    </div> 
+                <?php  else: ?>
+
+        <div class="producto-img-container">
+
+              <div class="sin-imagen">
+                 Sin foto
+              </div>
+
+            </div>
+
+         <?php endif; ?>
+
+                <div class="producto-info">
+
+
+                    <!-- NOMBRE -->
+
+                    <h3>
+
+                        <?= htmlspecialchars(
+                            $fila['nombre']
+                        ); ?>
+
+                    </h3>
+
+
+                    <!-- DESCRIPCIÓN -->
+
+                    <?php if (!empty($fila['descripcion'])) { ?>
+
+                        <p class="descripcion">
+
+                            <?= htmlspecialchars(
+                                $fila['descripcion']
+                            ); ?>
+
+                        </p>
+
+                    <?php } ?>
+
+
+                    <!-- CATEGORÍA -->
+
+                    <p>
+
+                        <strong>
+                            Categoría:
+                        </strong>
+
+                        <?= htmlspecialchars(
+                            $fila['categoria']
+                        ); ?>
+
+                    </p>
+
+
+                    <!-- PRECIO -->
+
+                    <div class="precio">
+
+                        $
+
+                        <?= number_format(
+                            $fila['precio'],
+                            0,
+                            ',',
+                            '.'
+                        ); ?>
+
+                    </div>
+
+
+                    <!-- DISPONIBILIDAD -->
+
+                    <div class="disponible">
+
+                        <strong>
+                            Disponibles:
+                        </strong>
+
+                        <?= (int)$fila['stock']; ?>
+
+                    </div>
+
+
+
+                    <!-- =================================================
+                         AGREGAR AL PEDIDO
+                    ================================================== -->
+
+                    <form
+                        method="POST"
+                        action="menu.php"
+                        class="form-pedido js-form-pedido">
+
+
+                        <input
+                            type="hidden"
+                            name="id_producto"
+                            value="<?php
+                                echo $fila['idProducto'];
+                            ?>">
+
+
+                        <button
+                            type="submit"
+                            class="btn-agregar">
+
+                            Agregar al pedido
+
+                        </button>
+
+
+                    </form>
+
+
+                </div>
+
+            </div>
+
+
+        <?php
+
+            }
+
+        } else {
+
+        ?>
+
+            <p>
+                No hay productos disponibles.
+            </p>
+
+        <?php
+
+        }
+
+        ?>
+
+    </div>
+
+
+
+    <!-- =================================================
+         VOLVER
+    ================================================== -->
 
     <button
         class="volver"
@@ -624,63 +1288,290 @@ Disponibles:
 
     </button>
 
-</div>
 
-<!--=====================================
-BOTÓN FLOTANTE PEDIDO
-======================================-->
-
-<div id="pedidoFlotante">
+</main>
 
 
-    <span class="icono">🛒</span>
 
-    <span id="contadorPedido">
-        <?php echo $cantidadProductos; ?>
-    </span>
+    <script>
+        /*
+         * ================================================================
+         * CARRITO FLOTANTE
+         * ================================================================
+         *
+         * El carrito SOLO se abre después de pulsar
+         * "Agregar al pedido".
+         *
+         * La tarjeta, imagen, nombre y descripción NO lo abren.
+         */
 
-</div>
+        const carritoFlotante =
+            document.getElementById('carritoFlotante');
 
-<?php include("includes/footer.php"); ?>
+        const carritoOverlay =
+            document.getElementById('carritoOverlay');
 
-<script>
+        const carritoContenido =
+            document.getElementById('carritoContenido');
 
-const boton = document.getElementById("pedidoFlotante");
+        const carritoTotal =
+            document.getElementById('carritoTotal');
 
-let mover = false;
+        const contadorPedido =
+            document.getElementById('contadorPedido');
 
-let offsetX = 10;
-let offsetY = 0;
 
-boton.addEventListener("mousedown", function(e){
+        function formatearPrecio(valor) {
 
-    mover = true;
+            return new Intl.NumberFormat('es-CO', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(valor);
 
-    offsetX = e.clientX - boton.offsetLeft;
+        }
 
-    offsetY = e.clientY - boton.offsetTop;
 
-});
+        function abrirCarrito() {
 
-document.addEventListener("mousemove", function(e){
+            carritoFlotante.classList.add('abierto');
 
-    if(!mover) return;
+            carritoOverlay.classList.add('abierto');
 
-    boton.style.left = (e.clientX - offsetX) + "px";
-    boton.style.top = (e.clientY - offsetY) + "px";
+            carritoFlotante.setAttribute(
+                'aria-hidden',
+                'false'
+            );
 
-    boton.style.right = "auto";
-    boton.style.bottom = "auto";
+        }
 
-});
 
-document.addEventListener("mouseup", function(){
+        function cerrarCarrito() {
 
-    mover = false;
+            carritoFlotante.classList.remove('abierto');
 
-});
+            carritoOverlay.classList.remove('abierto');
 
-</script>
+            carritoFlotante.setAttribute(
+                'aria-hidden',
+                'true'
+            );
+
+        }
+
+
+        function escaparHtml(valor) {
+
+            return String(valor ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+
+        }
+
+
+        function actualizarCarrito(datos) {
+
+            if (!datos || !datos.ok) {
+                return;
+            }
+
+            if (contadorPedido) {
+                contadorPedido.textContent =
+                    datos.cantidadProductos;
+            }
+
+
+            if (!datos.items || datos.items.length === 0) {
+
+                carritoContenido.innerHTML = `
+                    <div class="carrito-vacio">
+                        No hay productos en el pedido.
+                    </div>
+                `;
+
+            } else {
+
+                carritoContenido.innerHTML =
+                    datos.items.map(function(item) {
+
+                        const subtotal =
+                            Number(item.precio) *
+                            Number(item.cantidad);
+
+                        let imagen;
+
+                        if (item.imagen) {
+
+                            imagen = `
+                                <img
+                                    class="carrito-item-img"
+                                    src="${escaparHtml(item.imagen)}"
+                                    alt="${escaparHtml(item.nombre)}">
+                            `;
+
+                        } else {
+
+                            imagen = `
+                                <div class="carrito-item-img">
+                                </div>
+                            `;
+
+                        }
+
+                        return `
+                            <div class="carrito-item">
+
+                                ${imagen}
+
+                                <div class="carrito-item-info">
+
+                                    <p class="carrito-item-nombre">
+                                        ${escaparHtml(item.nombre)}
+                                    </p>
+
+                                    <div class="carrito-item-cantidad">
+                                        Cantidad: ${item.cantidad}
+                                    </div>
+
+                                    <div class="carrito-item-precio">
+                                        $${formatearPrecio(subtotal)}
+                                    </div>
+
+                                </div>
+
+                            </div>
+                        `;
+
+                    }).join('');
+
+            }
+
+
+            carritoTotal.textContent =
+                '$' + formatearPrecio(datos.totalPedido);
+
+        }
+
+
+        /*
+         * Solo interceptamos los formularios que tienen
+         * la clase .js-form-pedido.
+         */
+        document.querySelectorAll('.js-form-pedido')
+            .forEach(function(formulario) {
+
+                formulario.addEventListener(
+                    'submit',
+                    async function(evento) {
+
+                        evento.preventDefault();
+
+                        const boton =
+                            formulario.querySelector(
+                                '.btn-agregar'
+                            );
+
+                        const textoOriginal =
+                            boton.textContent;
+
+                        boton.disabled = true;
+
+                        boton.textContent =
+                            'Agregando...';
+
+
+                        try {
+
+                            const datosFormulario =
+                                new FormData(formulario);
+
+                            const respuesta =
+                                await fetch(
+                                    formulario.action,
+                                    {
+                                        method: 'POST',
+                                        body: datosFormulario,
+                                        headers: {
+                                            'X-Requested-With':
+                                                'XMLHttpRequest'
+                                        }
+                                    }
+                                );
+
+
+                            if (!respuesta.ok) {
+                                throw new Error(
+                                    'Error al agregar el producto.'
+                                );
+                            }
+
+
+                            const datos =
+                                await respuesta.json();
+
+
+                            if (!datos.ok) {
+                                throw new Error(
+                                    'No se pudo actualizar el pedido.'
+                                );
+                            }
+
+
+                            /*
+                             * Primero actualizamos el contenido.
+                             * Después abrimos el carrito.
+                             */
+                            actualizarCarrito(datos);
+
+                            abrirCarrito();
+
+
+                        } catch (error) {
+
+                            console.error(error);
+
+                            alert(
+                                'No fue posible agregar el producto al pedido.'
+                            );
+
+                        } finally {
+
+                            boton.disabled = false;
+
+                            boton.textContent =
+                                textoOriginal;
+
+                        }
+
+                    }
+                );
+
+            });
+
+
+        /*
+         * También se puede cerrar presionando ESC.
+         */
+        document.addEventListener(
+            'keydown',
+            function(evento) {
+
+                if (
+                    evento.key === 'Escape' &&
+                    carritoFlotante.classList.contains('abierto')
+                ) {
+
+                    cerrarCarrito();
+
+                }
+
+            }
+        );
+
+    </script>
 
 </body>
+
 </html>
