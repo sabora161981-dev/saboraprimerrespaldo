@@ -514,7 +514,15 @@ $resultado = mysqli_query(
             background: #ffddd0;
         }
 
+        .categoria.activo {
+        background: #ff6b35;S
+        color: white;
+         font-weight: bold;
+    }
 
+        .categoria.activo:hover {
+        background: #e85a2a;
+    }
         /*
         |--------------------------------------------------------------------------
         | CONTENIDO
@@ -978,23 +986,38 @@ $resultado = mysqli_query(
 
     <div class="categorias-contenedor">
 
-        <button class="categoria">
+        <button
+            type="button"
+            class="categoria activo"
+            data-categoria="todos">
             Todos
         </button>
 
-        <button class="categoria">
+        <button
+            type="button"
+            class="categoria"
+            data-categoria="comida">
             Comidas
         </button>
 
-        <button class="categoria">
+        <button
+            type="button"
+            class="categoria"
+            data-categoria="bebida">
             Bebidas
         </button>
 
-        <button class="categoria">
+        <button
+            type="button"
+            class="categoria"
+            data-categoria="helado">
             Helados
         </button>
 
-        <button class="categoria">
+        <button
+            type="button"
+            class="categoria"
+            data-categoria="adicion">
             Adiciones
         </button>
 
@@ -1003,14 +1026,13 @@ $resultado = mysqli_query(
 </div>
 
 
-
 <!-- =====================================================
      CONTENIDO
 ===================================================== -->
 
-    <!-- =====================================================
+<!-- =====================================================
          CARRITO FLOTANTE
-    ====================================================== -->
+====================================================== -->
 
     <div
         id="carritoOverlay"
@@ -1119,8 +1141,9 @@ $resultado = mysqli_query(
         ?>
 
 
-            <div class="producto">
-
+    <div
+         class="producto"
+        data-categoria="<?= strtolower(trim($fila['categoria'])); ?>">
 
                 <!-- IMAGEN -->
 
@@ -1569,7 +1592,65 @@ $resultado = mysqli_query(
 
             }
         );
+    /*
+ * ================================================================
+ * FILTRO DE CATEGORÍAS
+ * ================================================================
+ */
 
+const botonesCategoria =
+    document.querySelectorAll('.categoria');
+
+const productos =
+    document.querySelectorAll('.producto');
+
+
+botonesCategoria.forEach(function(boton) {
+
+    boton.addEventListener('click', function() {
+
+        const categoriaSeleccionada =
+            this.dataset.categoria;
+
+
+        /*
+         * Mostrar u ocultar productos
+         */
+        productos.forEach(function(producto) {
+
+            const categoriaProducto =
+                producto.dataset.categoria;
+
+            if (
+                categoriaSeleccionada === 'todos' ||
+                categoriaProducto === categoriaSeleccionada
+            ) {
+
+                producto.style.display = '';
+
+            } else {
+
+                producto.style.display = 'none';
+
+            }
+
+        });
+
+
+        /*
+         * Cambiar botón activo
+         */
+        botonesCategoria.forEach(function(btn) {
+
+            btn.classList.remove('activo');
+
+        });
+
+        this.classList.add('activo');
+
+    });
+
+});
     </script>
 
 </body>
