@@ -308,7 +308,7 @@ if (
         | MySQL genera primero id_factura mediante AUTO_INCREMENT.
         |
         */
-
+        $tokenFactura = bin2hex(random_bytes(32));
         $sqlFactura = "
             INSERT INTO factura (
                 numero_factura,
@@ -318,7 +318,9 @@ if (
                 descuento,
                 total,
                 metodo_pago,
-                estado
+                estado,
+                token_factura
+
             )
             VALUES (
                 NULL,
@@ -328,7 +330,8 @@ if (
                 ?,
                 ?,
                 ?,
-                'generada'
+                'generada',
+                 ?
             )
         ";
 
@@ -345,13 +348,14 @@ if (
 
         mysqli_stmt_bind_param(
             $stmtFactura,
-            "idddds",
+            "iddddss",
             $idUsuario,
             $subtotal,
             $impuestos,
             $descuento,
             $total,
-            $metodoPago
+            $metodoPago,
+            $tokenFactura
         );
 
         if (!mysqli_stmt_execute($stmtFactura)) {
@@ -513,6 +517,7 @@ if (
                 '0',
                 STR_PAD_LEFT
             ),
+            'tokenFactura' => $tokenFactura,
             'mensaje' => 'Factura generada correctamente.'
         ]);
 
@@ -1256,10 +1261,12 @@ header h1 {
     justify-content: center;
     color: #777;
     font-size: 11px;
+
+    margin-left: 19px;
 }
 
 .factura-legal {
-    margin: 0;
+    margin-left: 20px;
     padding: 0;
     border: 0;
     color: #555;
@@ -2207,9 +2214,15 @@ footer strong {
         <!-- PIE -->
         <div class="factura-pie">
 
-            <div class="factura-qr">
-                QR
-            </div>
+          <div 
+          class="factura-qr" 
+          id="qrFactura"
+          data-token="<?= htmlspecialchars(
+            $tokenFactura ?? '',
+            ENT_QUOTES,
+            'UTF-8'
+        ) ?>"
+    ></div>
 
             <div class="factura-legal">
 
@@ -2222,7 +2235,7 @@ footer strong {
 
                 <p>
                     <strong>Código QR:</strong>
-                    —
+                    Token de verificación
                 </p>
 
                 <p>
@@ -2647,6 +2660,19 @@ if (formularioPago) {
             numeroFactura.textContent =
                 datos.numeroFactura;
         }
+          /*
+        |--------------------------------------------------------------------------
+        | GENERAR / ACTUALIZAR QR
+        |--------------------------------------------------------------------------
+        | El QR debe utilizar el token devuelto por PHP en esta misma
+        | solicitud. No se utiliza el token PHP de la carga inicial,
+        | porque en ese momento todavía no existe la factura.
+        |--------------------------------------------------------------------------
+        */
+
+        if (!generarQR(datos.tokenFactura)) {
+            throw new Error('No fue posible generar el código QR.');
+        }
 
         /*
         |--------------------------------------------------------------------------
@@ -2659,9 +2685,10 @@ if (formularioPago) {
     })
     .catch(function(error) {
 
-        console.error(error);
+        console.error('Error en la generación de la factura:', error);
 
         alert(
+            error.message ||
             'No fue posible generar la factura.'
         );
 
@@ -2747,7 +2774,89 @@ document
     );
 
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/*
+|--------------------------------------------------------------------------
+| GENERAR QR DE LA FACTURA
+|--------------------------------------------------------------------------
+|
+| Esta función se ejecuta después de que PHP devuelve la factura generada.
+| Recibe directamente el token devuelto por fetch().
+|
+*/
+function generarQR(tokenFactura) {
 
+    const contenedorQR = document.getElementById('qrFactura');
+
+    if (!contenedorQR) {
+        console.error('No se encontró el contenedor #qrFactura.');
+        return false;
+    }
+
+    if (typeof QRCode === 'undefined') {
+        console.error('La librería QRCode no está disponible.');
+        contenedorQR.innerHTML = 'Error: QR no disponible';
+        return false;
+    }
+
+    if (!tokenFactura || typeof tokenFactura !== 'string') {
+        console.error('La factura no tiene un token válido.', tokenFactura);
+        contenedorQR.innerHTML = 'Sin QR';
+        return false;
+    }
+
+    // Elimina cualquier QR anterior antes de generar el nuevo.
+    contenedorQR.innerHTML = '';
+
+    // Conserva el token en el HTML para futuras operaciones de la interfaz.
+    contenedorQR.dataset.token = tokenFactura;
+
+    try {
+
+        new QRCode(contenedorQR, {
+            text: tokenFactura,
+            width: 110,
+            height: 110,
+            correctLevel: QRCode.CorrectLevel.M
+        });
+
+        return true;
+
+    } catch (error) {
+
+        console.error('Error generando el QR:', error);
+        contenedorQR.innerHTML = 'Error al generar QR';
+        return false;
+    }
+}
+
+/*
+|--------------------------------------------------------------------------
+| QR CUANDO LA FACTURA YA VIENE CARGADA DESDE PHP
+|--------------------------------------------------------------------------
+|
+| Este caso sirve cuando Pedidos.php se carga con un token existente.
+| En el flujo normal de confirmación, el QR se genera desde la respuesta
+| AJAX mediante generarQR(datos.tokenFactura).
+|
+*/
+document.addEventListener('DOMContentLoaded', function () {
+
+    const contenedorQR = document.getElementById('qrFactura');
+
+    if (!contenedorQR) {
+        return;
+    }
+
+    const tokenInicial = contenedorQR.dataset.token || '';
+
+    if (tokenInicial) {
+        generarQR(tokenInicial);
+    }
+
+});
+</script>
 
 </body>
 

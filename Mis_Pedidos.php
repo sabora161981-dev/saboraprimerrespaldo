@@ -37,7 +37,8 @@ $sql = "
         f.descuento,
         f.total,
         f.metodo_pago,
-        f.estado
+        f.estado,
+        f.token_factura
     FROM factura f
     WHERE f.id_usuario = ?
     ORDER BY f.fecha DESC, f.id_factura DESC
@@ -75,7 +76,8 @@ if ($id_factura > 0) {
             f.descuento,
             f.total,
             f.metodo_pago,
-            f.estado
+            f.estado,
+            f.token_factura
         FROM factura f
         WHERE f.id_factura = ?
         AND f.id_usuario = ?
@@ -96,7 +98,8 @@ if ($id_factura > 0) {
     if ($resultadoCabecera && mysqli_num_rows($resultadoCabecera) === 1) {
 
         $pedidoDetalle = mysqli_fetch_assoc($resultadoCabecera);
-
+      
+    
         $sqlLineas = "
             SELECT
                 df.id_detalle,
@@ -108,7 +111,7 @@ if ($id_factura > 0) {
                 p.nombre
             FROM detalle_factura df
             LEFT JOIN producto p
-                ON p.id_producto = df.idProducto
+                ON p.idProducto = df.idProducto
             WHERE df.id_factura = ?
             ORDER BY df.id_detalle ASC
         ";
@@ -593,7 +596,7 @@ if ($nombreCompleto === '') {
 
             <div class="acciones">
 
-                <a href="MisPedidos.php" class="boton">
+                <a href="Mis_Pedidos.php" class="boton">
                     ← Volver a mis pedidos
                 </a>
 
@@ -673,7 +676,7 @@ if ($nombreCompleto === '') {
                     <div class="acciones">
 
                         <a
-                            href="MisPedidos.php?id_factura=<?php echo (int)$pedido['id_factura']; ?>"
+                            href="Mis_Pedidos.php?id_factura=<?php echo (int)$pedido['id_factura']; ?>"
                             class="boton"
                         >
                             Ver pedido
