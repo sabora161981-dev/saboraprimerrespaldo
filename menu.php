@@ -383,11 +383,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 */
 
 $cantidadProductos = 0;
+$totalCarritoInicial = 0;
+$itemsCarritoInicial = [];
 
 foreach ($_SESSION['pedido'] as $producto) {
 
-    $cantidadProductos +=
+    $cantidadProductoInicial =
         (int)$producto['cantidad'];
+
+    $precioProductoInicial =
+        (float)$producto['precio'];
+
+    $cantidadProductos +=
+        $cantidadProductoInicial;
+
+    $totalCarritoInicial +=
+        $precioProductoInicial *
+        $cantidadProductoInicial;
+
+    $itemsCarritoInicial[] = [
+        'idProducto' =>
+            (int)$producto['idProducto'],
+
+        'nombre' =>
+            $producto['nombre'],
+
+        'precio' =>
+            $precioProductoInicial,
+
+        'cantidad' =>
+            $cantidadProductoInicial,
+
+        'imagen' =>
+            $producto['imagen'] ?? ''
+    ];
 }
 
 
@@ -928,6 +957,117 @@ $resultado = mysqli_query(
             display: block;
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | BOTON FLOTANTE PARA REABRIR EL CARRITO
+        |--------------------------------------------------------------------------
+        |
+        | Solo se muestra cuando existe al menos un producto en el pedido.
+        | Permanece disponible aunque el carrito haya sido cerrado.
+        */
+
+        .boton-carrito-flotante {
+
+            position: fixed;
+
+            right: 25px;
+
+            bottom: 25px;
+
+            width: 58px;
+
+            height: 58px;
+
+            border: none;
+
+            border-radius: 50%;
+
+            background: #ff6b35;
+
+            color: white;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            font-size: 25px;
+
+            cursor: pointer;
+
+            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+
+            z-index: 1001;
+
+            opacity: 0;
+
+            visibility: hidden;
+
+            pointer-events: none;
+
+            transform: scale(0.85);
+
+            transition:
+                opacity 0.25s ease,
+                visibility 0.25s ease,
+                transform 0.25s ease;
+        }
+
+        .boton-carrito-flotante.visible {
+
+            opacity: 1;
+
+            visibility: visible;
+
+            pointer-events: auto;
+
+            transform: scale(1);
+        }
+
+        .boton-carrito-flotante:hover {
+            background: #e85a2a;
+        }
+
+        .boton-carrito-flotante-contador {
+
+            position: absolute;
+
+            top: -3px;
+
+            right: -3px;
+
+            min-width: 23px;
+
+            height: 23px;
+
+            padding: 0 5px;
+
+            border-radius: 50%;
+
+            background: #333;
+
+            color: white;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            font-size: 11px;
+
+            font-weight: bold;
+
+            box-sizing: border-box;
+        }
+
+        .carrito-flotante.abierto ~ .boton-carrito-flotante {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
         .carrito-flotante-header {
             display: flex;
             align-items: center;
@@ -1281,6 +1421,27 @@ $resultado = mysqli_query(
 
     </aside>
 
+    <!-- =====================================================
+         BOTON PARA REABRIR EL CARRITO
+    ====================================================== -->
+
+    <button
+        type="button"
+        id="botonCarritoFlotante"
+        class="boton-carrito-flotante"
+        onclick="abrirCarrito()"
+        aria-label="Abrir pedido actual">
+
+        🛒
+
+        <span
+            id="contadorCarritoFlotante"
+            class="boton-carrito-flotante-contador">
+            <?= (int)$cantidadProductos; ?>
+        </span>
+
+    </button>
+
 
 <main>
 
@@ -1536,6 +1697,45 @@ $resultado = mysqli_query(
         const contadorPedido =
             document.getElementById('contadorPedido');
 
+        const botonCarritoFlotante =
+            document.getElementById('botonCarritoFlotante');
+
+        const contadorCarritoFlotante =
+            document.getElementById('contadorCarritoFlotante');
+
+
+        function actualizarBotonCarrito(cantidad) {
+
+            const cantidadNumerica =
+                Number(cantidad) || 0;
+
+            if (contadorCarritoFlotante) {
+
+                contadorCarritoFlotante.textContent =
+                    cantidadNumerica;
+            }
+
+            if (!botonCarritoFlotante) {
+                return;
+            }
+
+            if (cantidadNumerica > 0) {
+
+                botonCarritoFlotante.classList.add('visible');
+
+            } else {
+
+                botonCarritoFlotante.classList.remove('visible');
+
+                /*
+                 * Si el pedido queda completamente vacío,
+                 * también cerramos el carrito por seguridad.
+                 */
+                cerrarCarrito();
+
+            }
+        }
+
 
         function formatearPrecio(valor) {
 
@@ -1549,6 +1749,11 @@ $resultado = mysqli_query(
 
         function abrirCarrito() {
 
+            if (botonCarritoFlotante && !botonCarritoFlotante.classList.contains('visible')) {
+
+                return;
+            }
+
             carritoFlotante.classList.add('abierto');
 
             carritoOverlay.classList.add('abierto');
@@ -1557,6 +1762,12 @@ $resultado = mysqli_query(
                 'aria-hidden',
                 'false'
             );
+
+            if (botonCarritoFlotante) {
+
+                botonCarritoFlotante.classList.remove('visible');
+
+            }
 
         }
 
@@ -1571,6 +1782,24 @@ $resultado = mysqli_query(
                 'aria-hidden',
                 'true'
             );
+
+            const cantidadActual =
+                contadorCarritoFlotante
+                    ? Number(contadorCarritoFlotante.textContent) || 0
+                    : 0;
+
+            if (botonCarritoFlotante) {
+
+                if (cantidadActual > 0) {
+
+                    botonCarritoFlotante.classList.add('visible');
+
+                } else {
+
+                    botonCarritoFlotante.classList.remove('visible');
+
+                }
+            }
 
         }
 
@@ -1597,6 +1826,10 @@ $resultado = mysqli_query(
                 contadorPedido.textContent =
                     datos.cantidadProductos;
             }
+
+            actualizarBotonCarrito(
+                datos.cantidadProductos
+            );
 
             if (!datos.items || datos.items.length === 0) {
 
@@ -1756,6 +1989,28 @@ $resultado = mysqli_query(
             }
         }
 
+
+        /*
+         * Estado inicial del carrito.
+         *
+         * IMPORTANTE:
+         * Si el pedido ya existia en la sesion antes de cargar
+         * menu.php, debemos reconstruir tambien el contenido
+         * visual del carrito.
+         *
+         * Antes solo se actualizaba el contador, por eso podia
+         * verse "2" en el boton mientras el panel mostraba
+         * "No hay productos en el pedido".
+         */
+        actualizarCarrito({
+            ok: true,
+            cantidadProductos: <?= (int)$cantidadProductos; ?>,
+            totalPedido: <?= json_encode($totalCarritoInicial); ?>,
+            items: <?= json_encode(
+                $itemsCarritoInicial,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+            ); ?>
+        });
 
         /*
          * Solo interceptamos los formularios que tienen

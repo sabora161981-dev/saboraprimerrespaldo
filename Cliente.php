@@ -210,7 +210,9 @@ footer{
 
         <div class="opcion">
             <h3>📋 Mis Pedidos</h3>
-            <a href="#">Consultar</a>
+           <a href="Mis_Pedidos.php" class="...">
+    Consultar
+</a>
         </div>
 
         <div class="opcion">
