@@ -16,29 +16,27 @@ if (!isset($_SESSION['pedido'])) {
 
 /*
 |--------------------------------------------------------------------------
-| AGREGAR PRODUCTO AL PEDIDO
+| PROCESAR PEDIDO
 |--------------------------------------------------------------------------
-|
-| Esta es la adaptación de la lógica addToCart() del código original.
-|
-| Si el producto ya existe:
-|     cantidad + 1
-|
-| Si no existe:
-|     se agrega con cantidad 1
-|
 */
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST'
-    && isset($_POST['id_producto'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $idProducto = (int) $_POST['id_producto'];
+    $accion = $_POST['accion'] ?? '';
 
-    if ($idProducto > 0) {
+    $idProducto = isset($_POST['id_producto'])
+        ? (int)$_POST['id_producto']
+        : 0;
 
-        /*
-        | Buscar el producto en la base de datos
-        */
+
+    /*
+    |--------------------------------------------------------------------------
+    | AGREGAR PRODUCTO
+    |--------------------------------------------------------------------------
+    */
+
+    if ($accion === 'agregar' && $idProducto > 0) {
+
         $sqlProducto = "
             SELECT
                 idProducto,
@@ -69,29 +67,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             mysqli_stmt_get_result($stmtProducto);
 
 
-        /*
-        | Verificar que el producto exista
-        */
         if ($filaProducto = mysqli_fetch_assoc($resultadoProducto)) {
-
-            /*
-            |--------------------------------------------------------------------------
-            | BUSCAR SI YA EXISTE EN EL PEDIDO
-            |--------------------------------------------------------------------------
-            */
 
             $productoEncontrado = false;
 
+
             foreach ($_SESSION['pedido'] as $indice => $producto) {
 
-                if ((int)$producto['idProducto'] === $idProducto) {
+                if (
+                    (int)$producto['idProducto']
+                    === $idProducto
+                ) {
 
                     /*
-                    | El producto ya existe.
-                    | Aumentamos solamente la cantidad.
+                    | No permitir superar el stock disponible
                     */
 
-                    $_SESSION['pedido'][$indice]['cantidad']++;
+                    $cantidadActual =
+                        (int)$producto['cantidad'];
+
+                    $stockDisponible =
+                        (int)$filaProducto['stock'];
+
+
+                    if ($cantidadActual < $stockDisponible) {
+
+                        $_SESSION['pedido'][$indice]['cantidad']++;
+
+                    }
 
                     $productoEncontrado = true;
 
@@ -102,29 +105,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
             /*
             |--------------------------------------------------------------------------
-            | SI NO EXISTE, AGREGARLO
+            | PRODUCTO NUEVO
             |--------------------------------------------------------------------------
             */
 
             if (!$productoEncontrado) {
 
-                $_SESSION['pedido'][] = [
+                /*
+                | Solo agregar si existe disponibilidad
+                */
 
-                    'idProducto' => $filaProducto['idProducto'],
+                if ((int)$filaProducto['stock'] > 0) {
 
-                    'nombre' => $filaProducto['nombre'],
+                    $_SESSION['pedido'][] = [
 
-                    'descripcion' => $filaProducto['descripcion'],
+                        'idProducto' =>
+                            $filaProducto['idProducto'],
 
-                    'precio' => $filaProducto['precio'],
+                        'nombre' =>
+                            $filaProducto['nombre'],
 
-                    'imagen' => $filaProducto['imagen'],
+                        'descripcion' =>
+                            $filaProducto['descripcion'],
 
-                    'categoria' => $filaProducto['categoria'],
+                        'precio' =>
+                            $filaProducto['precio'],
 
-                    'cantidad' => 1
+                        'imagen' =>
+                            $filaProducto['imagen'],
 
-                ];
+                        'categoria' =>
+                            $filaProducto['categoria'],
+
+                        'cantidad' => 1
+                    ];
+                }
             }
         }
 
@@ -134,32 +149,153 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
     /*
     |--------------------------------------------------------------------------
-    | EVITAR QUE AL ACTUALIZAR LA PÁGINA SE VUELVA A AGREGAR
+    | AUMENTAR / DISMINUIR CANTIDAD
     |--------------------------------------------------------------------------
     */
 
+    if (
+        $accion === 'cambiar_cantidad'
+        && $idProducto > 0
+    ) {
+
+        $delta = isset($_POST['delta'])
+            ? (int)$_POST['delta']
+            : 0;
+
+
+        foreach ($_SESSION['pedido'] as $indice => $producto) {
+
+            if (
+                (int)$producto['idProducto']
+                === $idProducto
+            ) {
+
+                $nuevaCantidad =
+                    (int)$producto['cantidad'] + $delta;
+
+
+                /*
+                | Si llega a 0 o menos,
+                | eliminamos el producto.
+                */
+
+                if ($nuevaCantidad <= 0) {
+
+                    unset(
+                        $_SESSION['pedido'][$indice]
+                    );
+
+                    $_SESSION['pedido'] =
+                        array_values(
+                            $_SESSION['pedido']
+                        );
+
+                } else {
+
+                    /*
+                    | Consultar stock antes de aumentar
+                    */
+
+                    if ($delta > 0) {
+
+                        $sqlStock = "
+                            SELECT stock
+                            FROM producto
+                            WHERE idProducto = ?
+                        ";
+
+                        $stmtStock =
+                            mysqli_prepare(
+                                $conexion,
+                                $sqlStock
+                            );
+
+                        mysqli_stmt_bind_param(
+                            $stmtStock,
+                            "i",
+                            $idProducto
+                        );
+
+                        mysqli_stmt_execute(
+                            $stmtStock
+                        );
+
+                        $resultadoStock =
+                            mysqli_stmt_get_result(
+                                $stmtStock
+                            );
+
+                        $filaStock =
+                            mysqli_fetch_assoc(
+                                $resultadoStock
+                            );
+
+                        $stockDisponible =
+                            $filaStock
+                                ? (int)$filaStock['stock']
+                                : 0;
+
+                        mysqli_stmt_close(
+                            $stmtStock
+                        );
+
+
+                        /*
+                        | No superar stock
+                        */
+
+                        if (
+                            $nuevaCantidad
+                            <= $stockDisponible
+                        ) {
+
+                            $_SESSION['pedido'][$indice]
+                                ['cantidad'] =
+                                $nuevaCantidad;
+                        }
+
+                    } else {
+
+                        /*
+                        | Disminuir cantidad
+                        */
+
+                        $_SESSION['pedido'][$indice]
+                            ['cantidad'] =
+                            $nuevaCantidad;
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
+
     /*
     |--------------------------------------------------------------------------
-    | RESPUESTA PARA EL CARRITO FLOTANTE
-    |--------------------------------------------------------------------------
-    |
-    | Cuando el botón "Agregar al pedido" se pulsa desde JavaScript,
-    | devolvemos el pedido actualizado en JSON.
-    |
-    | Si la solicitud no es AJAX, conservamos la redirección normal.
+    | RESPUESTA AJAX
     |--------------------------------------------------------------------------
     */
 
     if (
         isset($_SERVER['HTTP_X_REQUESTED_WITH']) &&
-        strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
+        strtolower(
+            $_SERVER['HTTP_X_REQUESTED_WITH']
+        ) === 'xmlhttprequest'
     ) {
 
         $cantidadProductosRespuesta = 0;
+
         $totalPedidoRespuesta = 0;
+
         $itemsPedidoRespuesta = [];
 
-        foreach ($_SESSION['pedido'] as $productoPedido) {
+
+        foreach (
+            $_SESSION['pedido']
+            as $productoPedido
+        ) {
 
             $cantidadProducto =
                 (int)$productoPedido['cantidad'];
@@ -167,13 +303,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             $precioProducto =
                 (float)$productoPedido['precio'];
 
+
             $cantidadProductosRespuesta +=
                 $cantidadProducto;
 
+
             $totalPedidoRespuesta +=
-                $precioProducto * $cantidadProducto;
+                $precioProducto *
+                $cantidadProducto;
+
 
             $itemsPedidoRespuesta[] = [
+
+                'idProducto' =>
+                    (int)$productoPedido['idProducto'],
+
                 'nombre' =>
                     $productoPedido['nombre'],
 
@@ -188,16 +332,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             ];
         }
 
+
         header(
             'Content-Type: application/json; charset=utf-8'
         );
 
+
         echo json_encode([
+
             'ok' => true,
+
             'cantidadProductos' =>
                 $cantidadProductosRespuesta,
+
             'totalPedido' =>
                 $totalPedidoRespuesta,
+
             'items' =>
                 $itemsPedidoRespuesta
         ]);
@@ -208,11 +358,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
     /*
     |--------------------------------------------------------------------------
-    | EVITAR QUE AL ACTUALIZAR LA PÁGINA SE VUELVA A AGREGAR
+    | SOLICITUD NORMAL
     |--------------------------------------------------------------------------
     */
 
     header("Location: menu.php");
+
     exit;
 }
 
@@ -842,9 +993,46 @@ $resultado = mysqli_query(
         }
 
         .carrito-item-cantidad {
-            color: #666;
-            font-size: 14px;
-        }
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.btn-cantidad {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #f0e0d5;
+    border-radius: 50%;
+    background: white;
+    color: #ff6b35;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.btn-cantidad:hover {
+    background: #ff6b35;
+    color: white;
+}
+
+.btn-cantidad:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+
+.cantidad-valor {
+    min-width: 25px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: bold;
+    color: #333;
+}
 
         .carrito-item-precio {
             margin-top: 4px;
@@ -1084,7 +1272,7 @@ $resultado = mysqli_query(
             </div>
 
             <a
-                href="carrito.php"
+                href="Pedidos.php"
                 class="btn-ver-pedido">
                 Ver pedido
             </a>
@@ -1253,6 +1441,11 @@ $resultado = mysqli_query(
 
                         <input
                             type="hidden"
+                            name="accion"
+                            value="agregar">
+
+                        <input
+                            type="hidden"
                             name="id_producto"
                             value="<?php
                                 echo $fila['idProducto'];
@@ -1405,7 +1598,6 @@ $resultado = mysqli_query(
                     datos.cantidadProductos;
             }
 
-
             if (!datos.items || datos.items.length === 0) {
 
                 carritoContenido.innerHTML = `
@@ -1437,7 +1629,8 @@ $resultado = mysqli_query(
                         } else {
 
                             imagen = `
-                                <div class="carrito-item-img">
+                                <div
+                                    class="carrito-item-img">
                                 </div>
                             `;
 
@@ -1454,8 +1647,32 @@ $resultado = mysqli_query(
                                         ${escaparHtml(item.nombre)}
                                     </p>
 
+                                    <div class="carrito-item-precio">
+                                        Precio: $${formatearPrecio(item.precio)}
+                                    </div>
+
                                     <div class="carrito-item-cantidad">
-                                        Cantidad: ${item.cantidad}
+
+                                        <button
+                                            type="button"
+                                            class="btn-cantidad"
+                                            onclick="cambiarCantidad(${item.idProducto}, -1)"
+                                            aria-label="Disminuir cantidad">
+                                            −
+                                        </button>
+
+                                        <span class="cantidad-valor">
+                                            ${item.cantidad}
+                                        </span>
+
+                                        <button
+                                            type="button"
+                                            class="btn-cantidad"
+                                            onclick="cambiarCantidad(${item.idProducto}, 1)"
+                                            aria-label="Aumentar cantidad">
+                                            +
+                                        </button>
+
                                     </div>
 
                                     <div class="carrito-item-precio">
@@ -1471,10 +1688,72 @@ $resultado = mysqli_query(
 
             }
 
-
             carritoTotal.textContent =
                 '$' + formatearPrecio(datos.totalPedido);
 
+        }
+
+
+        async function cambiarCantidad(idProducto, delta) {
+
+            try {
+
+                const datosFormulario =
+                    new FormData();
+
+                datosFormulario.append(
+                    'accion',
+                    'cambiar_cantidad'
+                );
+
+                datosFormulario.append(
+                    'id_producto',
+                    idProducto
+                );
+
+                datosFormulario.append(
+                    'delta',
+                    delta
+                );
+
+                const respuesta =
+                    await fetch(
+                        'menu.php',
+                        {
+                            method: 'POST',
+                            body: datosFormulario,
+                            headers: {
+                                'X-Requested-With':
+                                    'XMLHttpRequest'
+                            }
+                        }
+                    );
+
+                if (!respuesta.ok) {
+                    throw new Error(
+                        'No se pudo modificar la cantidad.'
+                    );
+                }
+
+                const datos =
+                    await respuesta.json();
+
+                if (!datos.ok) {
+                    throw new Error(
+                        'No se pudo actualizar el pedido.'
+                    );
+                }
+
+                actualizarCarrito(datos);
+
+            } catch (error) {
+
+                console.error(error);
+
+                alert(
+                    'No fue posible modificar la cantidad.'
+                );
+            }
         }
 
 
