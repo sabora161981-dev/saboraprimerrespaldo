@@ -323,7 +323,7 @@ if (
 
             )
             VALUES (
-                NULL,
+                0,
                 ?,
                 ?,
                 ?,
@@ -331,7 +331,7 @@ if (
                 ?,
                 ?,
                 'generada',
-                 ?
+                ?
             )
         ";
 
@@ -361,7 +361,8 @@ if (
         if (!mysqli_stmt_execute($stmtFactura)) {
 
             throw new Exception(
-                'No se pudo guardar la factura.'
+                'No se pudo guardar la factura. MySQL: ' .
+                mysqli_stmt_error($stmtFactura)
             );
         }
 
@@ -447,7 +448,8 @@ if (
 
             if (!mysqli_stmt_execute($stmtDetalle)) {
                 throw new Exception(
-                    'No se pudo guardar un producto de la factura.'
+                    'No se pudo guardar un producto de la factura. MySQL: ' .
+                    mysqli_stmt_error($stmtDetalle)
                 );
             }
         }
@@ -487,7 +489,8 @@ if (
         if (!mysqli_stmt_execute($stmtNumero)) {
 
             throw new Exception(
-                'No se pudo asignar el consecutivo.'
+                'No se pudo asignar el consecutivo. MySQL: ' .
+                mysqli_stmt_error($stmtNumero)
             );
         }
 
@@ -2651,8 +2654,8 @@ if (formularioPago) {
         */
 
         const numeroFactura =
-            document.querySelector(
-                '.numero-factura strong'
+            document.getElementById(
+                'numeroFactura'
             );
 
         if (numeroFactura) {
@@ -2664,14 +2667,12 @@ if (formularioPago) {
         |--------------------------------------------------------------------------
         | GENERAR / ACTUALIZAR QR
         |--------------------------------------------------------------------------
-        | El QR debe utilizar el token devuelto por PHP en esta misma
-        | solicitud. No se utiliza el token PHP de la carga inicial,
-        | porque en ese momento todavía no existe la factura.
+        | El QR utiliza el token generado por PHP en esta misma solicitud.
         |--------------------------------------------------------------------------
         */
 
-        if (!generarQR(datos.tokenFactura)) {
-            throw new Error('No fue posible generar el código QR.');
+        if (datos.tokenFactura) {
+            generarQR(datos.tokenFactura);
         }
 
         /*
@@ -2813,9 +2814,12 @@ function generarQR(tokenFactura) {
     contenedorQR.dataset.token = tokenFactura;
 
     try {
-
+        
+    const urlValidacion =
+    'http://192.168.101.81/sabora/validar_factura.php?token=' +
+    encodeURIComponent(tokenFactura);
         new QRCode(contenedorQR, {
-            text: tokenFactura,
+            text: urlValidacion,
             width: 110,
             height: 110,
             correctLevel: QRCode.CorrectLevel.M

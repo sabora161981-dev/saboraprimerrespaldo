@@ -217,7 +217,9 @@ footer{
 
         <div class="opcion">
             <h3>👤 Perfil</h3>
-            <a href="#">Actualizar Datos</a>
+           <a href="/sabora/Actualizar_Datos.php">
+            Actualizar Datos
+           </a>
         </div>
 
     </div>

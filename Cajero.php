@@ -363,7 +363,7 @@ Rol:
         Generar, consultar e imprimir facturas.
     </p>
 
-    <a href="facturas.php">Facturar</a>
+   <a href="facturacion.php">Facturar</a>
 
 </div>
 
