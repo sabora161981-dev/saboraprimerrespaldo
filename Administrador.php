@@ -220,8 +220,7 @@ footer{
 
 <p>Administrar pedidos realizados.</p>
 
-<a href="pedidos.php">Consultar</a>
-
+<a href="pedidos_admin.php">Consultar</a>
 </div>
 
 <div class="opcion">
