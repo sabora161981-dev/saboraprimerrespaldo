@@ -20,6 +20,136 @@ if (strtolower($_SESSION['rol'] ?? '') !== 'administrador') {
 
 require_once "conexion.php";
 
+/*
+|--------------------------------------------------------------------------
+| PAGO DE FACTURA DESDE PEDIDOS Y VENTAS
+|--------------------------------------------------------------------------
+| Cambio puntual: conserva filtros, consultas, estadísticas y detalle.
+| El inventario NO se modifica al confirmar el pago porque ya se descuenta
+| cuando se registra el pedido en Pedidos.php.
+|--------------------------------------------------------------------------
+*/
+
+if (empty($_SESSION['csrf_pedidos_admin'])) {
+    $_SESSION['csrf_pedidos_admin'] = bin2hex(random_bytes(32));
+}
+
+$mensajeAccion = '';
+$tipoMensajeAccion = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['accion_factura'] ?? '') === 'completar_pago') {
+
+    $idFacturaPago = (int)($_POST['id_factura'] ?? 0);
+    $tokenRecibido = (string)($_POST['csrf_token'] ?? '');
+
+    if (
+        $idFacturaPago <= 0
+        || !hash_equals(
+            (string)$_SESSION['csrf_pedidos_admin'],
+            $tokenRecibido
+        )
+    ) {
+        $_SESSION['mensaje_pedidos_admin'] = [
+            'tipo' => 'error',
+            'texto' => 'La solicitud no es válida. Actualiza la página e inténtalo nuevamente.'
+        ];
+    } else {
+        $minutosExpiracionPago = 30;
+
+        /*
+         * Solo se paga una factura que siga GENERADA y dentro del plazo.
+         * No se descuenta stock ni se crea otra factura aquí.
+         */
+        $sqlPagarFactura = "
+            UPDATE factura
+            SET estado = 'pagada'
+            WHERE id_factura = ?
+              AND estado = 'generada'
+              AND fecha >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+        ";
+
+        $stmtPagarFactura = mysqli_prepare($conexion, $sqlPagarFactura);
+
+        if ($stmtPagarFactura) {
+            mysqli_stmt_bind_param(
+                $stmtPagarFactura,
+                'ii',
+                $idFacturaPago,
+                $minutosExpiracionPago
+            );
+            mysqli_stmt_execute($stmtPagarFactura);
+
+            if (mysqli_stmt_affected_rows($stmtPagarFactura) === 1) {
+                $_SESSION['mensaje_pedidos_admin'] = [
+                    'tipo' => 'ok',
+                    'texto' => 'Pago confirmado correctamente. La factura quedó PAGADA; el inventario no se descontó nuevamente.'
+                ];
+            } else {
+                /*
+                 * Si aún figura GENERADA pero ya pasó el plazo, se marca
+                 * ANULADA. Si ya cambió de estado, no se altera.
+                 */
+                $sqlVencerFactura = "
+                    UPDATE factura
+                    SET estado = 'anulada'
+                    WHERE id_factura = ?
+                      AND estado = 'generada'
+                      AND fecha < DATE_SUB(NOW(), INTERVAL ? MINUTE)
+                ";
+                $stmtVencerFactura = mysqli_prepare($conexion, $sqlVencerFactura);
+
+                if ($stmtVencerFactura) {
+                    mysqli_stmt_bind_param(
+                        $stmtVencerFactura,
+                        'ii',
+                        $idFacturaPago,
+                        $minutosExpiracionPago
+                    );
+                    mysqli_stmt_execute($stmtVencerFactura);
+                    $vencioAhora = mysqli_stmt_affected_rows($stmtVencerFactura) === 1;
+                    mysqli_stmt_close($stmtVencerFactura);
+                } else {
+                    $vencioAhora = false;
+                }
+
+                $_SESSION['mensaje_pedidos_admin'] = [
+                    'tipo' => 'error',
+                    'texto' => $vencioAhora
+                        ? 'La factura superó los 30 minutos y fue anulada. No se puede completar el pago.'
+                        : 'No se pudo completar el pago: la factura puede estar pagada, anulada o vencida.'
+                ];
+            }
+
+            mysqli_stmt_close($stmtPagarFactura);
+        } else {
+            $_SESSION['mensaje_pedidos_admin'] = [
+                'tipo' => 'error',
+                'texto' => 'No fue posible preparar la confirmación del pago.'
+            ];
+        }
+    }
+
+    $idVolver = $idFacturaPago > 0 ? '&id_factura=' . $idFacturaPago : '';
+    header(
+        'Location: pedidos_admin.php?'
+        . 'usuario=' . (int)($_GET['usuario'] ?? 0)
+        . '&buscar=' . urlencode((string)($_GET['buscar'] ?? ''))
+        . '&estado=' . urlencode((string)($_GET['estado'] ?? ''))
+        . '&fecha_desde=' . urlencode((string)($_GET['fecha_desde'] ?? ''))
+        . '&fecha_hasta=' . urlencode((string)($_GET['fecha_hasta'] ?? ''))
+        . $idVolver
+    );
+    exit();
+}
+
+if (!empty($_SESSION['mensaje_pedidos_admin'])) {
+    $mensajeAccion = (string)($_SESSION['mensaje_pedidos_admin']['texto'] ?? '');
+    $tipoMensajeAccion = (string)($_SESSION['mensaje_pedidos_admin']['tipo'] ?? '');
+    unset($_SESSION['mensaje_pedidos_admin']);
+}
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -893,6 +1023,36 @@ tr:hover td{
 }
 
 
+/* MENSAJES DE ACCIÓN */
+.mensaje-accion{
+    padding:14px 18px;
+    margin:0 0 20px;
+    border-radius:10px;
+    font-weight:600;
+}
+.mensaje-ok{
+    background:#e8f7ec;
+    color:#17652b;
+    border:1px solid #a9ddb5;
+}
+.mensaje-error{
+    background:#fdecec;
+    color:#9b2020;
+    border:1px solid #efb2b2;
+}
+.btn-pagar{
+    display:inline-block;
+    border:0;
+    border-radius:7px;
+    padding:9px 12px;
+    background:#198754;
+    color:#fff;
+    font-weight:700;
+    cursor:pointer;
+}
+.btn-pagar:hover{filter:brightness(.95)}
+.form-pagar{display:inline-block;margin-top:8px}
+
 /* SIN RESULTADOS */
 
 .sin-resultados{
@@ -960,6 +1120,12 @@ footer strong{
 
 </div>
 
+
+<?php if ($mensajeAccion !== ''): ?>
+    <div class="mensaje-accion <?= $tipoMensajeAccion === 'ok' ? 'mensaje-ok' : 'mensaje-error' ?>">
+        <?= e($mensajeAccion) ?>
+    </div>
+<?php endif; ?>
 
 <!-- ESTADÍSTICAS -->
 
@@ -1363,6 +1529,16 @@ footer strong{
                             Ver detalle
                         </a>
 
+                        <?php if (strtolower((string)$venta['estado']) === 'generada'): ?>
+                            <form class="form-pagar" method="POST"
+                                  onsubmit="return confirm('¿Confirmas que el pago de esta factura fue recibido?');">
+                                <input type="hidden" name="accion_factura" value="completar_pago">
+                                <input type="hidden" name="id_factura" value="<?= (int)$venta['id_factura'] ?>">
+                                <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_pedidos_admin']) ?>">
+                                <button type="submit" class="btn-pagar">Completar pago</button>
+                            </form>
+                        <?php endif; ?>
+
                     </td>
 
                 </tr>
@@ -1508,6 +1684,19 @@ footer strong{
 
     </div>
 
+
+    <?php if (strtolower((string)$facturaSeleccionada['estado']) === 'generada'): ?>
+        <form class="form-pagar" method="POST"
+              onsubmit="return confirm('¿Confirmas que el pago de esta factura fue recibido?');">
+            <input type="hidden" name="accion_factura" value="completar_pago">
+            <input type="hidden" name="id_factura" value="<?= (int)$facturaSeleccionada['id_factura'] ?>">
+            <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_pedidos_admin']) ?>">
+            <button type="submit" class="btn-pagar">Completar pago</button>
+        </form>
+        <p style="margin:8px 0 20px;color:#666;font-size:13px">
+            Disponible durante los primeros 30 minutos desde la generación de la factura.
+        </p>
+    <?php endif; ?>
 
     <h3>
         Productos comprados

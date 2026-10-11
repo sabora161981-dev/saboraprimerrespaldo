@@ -29,6 +29,12 @@ $idUsuario = filter_input(INPUT_GET, "usuario", FILTER_VALIDATE_INT);
 $tipo = trim($_GET["tipo"] ?? "");
 $desde = trim($_GET["desde"] ?? "");
 $hasta = trim($_GET["hasta"] ?? "");
+$numeroFactura = trim($_GET["numero_factura"] ?? "");
+
+// El número de factura es opcional y debe contener solo dígitos.
+if ($numeroFactura !== "" && !ctype_digit($numeroFactura)) {
+    exit("El número de factura debe contener solo números.");
+}
 
 $tiposValidos = ["ENTRADA", "SALIDA", "AJUSTE"];
 
@@ -112,6 +118,15 @@ try {
         $condiciones[] = "m.idUsuario = ?";
         $tiposParametros .= "i";
         $parametros[] = $idUsuario;
+    }
+
+    // Filtrar movimientos cuya observación identifica la factura solicitada.
+    // Admite formatos existentes como "Factura #19" y "Factura de venta N.º 19".
+    if ($numeroFactura !== "") {
+        $condiciones[] = "m.observacion LIKE ? AND m.observacion LIKE ?";
+        $tiposParametros .= "ss";
+        $parametros[] = "%Factura%";
+        $parametros[] = "%" . $numeroFactura . "%";
     }
 
     if ($desde !== "") {
@@ -492,6 +507,19 @@ try {
                             </option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+
+                <div class="campo">
+                    <label for="numero_factura">Número de factura</label>
+                    <input
+                        type="text"
+                        name="numero_factura"
+                        id="numero_factura"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="Ej. 19"
+                        value="<?= h($numeroFactura) ?>"
+                    >
                 </div>
 
                 <div class="campo">
