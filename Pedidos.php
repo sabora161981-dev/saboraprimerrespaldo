@@ -43,8 +43,9 @@ $direccionCliente = '';
 
 if ($correo !== '') {
 
+    // La tabla usuarios de Sabora no tiene columna direccion.
     $sqlCliente = "
-        SELECT identificacion, direccion
+        SELECT identificacion
         FROM usuarios
         WHERE correo = ?
         LIMIT 1
@@ -244,7 +245,7 @@ foreach ($_SESSION['pedido'] as $producto) {
 
 /*
 |--------------------------------------------------------------------------
-| GENERAR FACTURA DE VENTA
+| GENERAR FACTURA + DESCONTAR INVENTARIO + REGISTRAR HISTORIAL
 |--------------------------------------------------------------------------
 */
 
@@ -253,288 +254,190 @@ if (
     isset($_POST['accion']) &&
     $_POST['accion'] === 'generar_factura'
 ) {
-
     header('Content-Type: application/json; charset=utf-8');
 
-    if (empty($_SESSION['pedido'])) {
-
-        echo json_encode([
-            'ok' => false,
-            'mensaje' => 'No hay productos en el pedido.'
-        ]);
-
+    if (empty($_SESSION['pedido']) || !is_array($_SESSION['pedido'])) {
+        echo json_encode(['ok' => false, 'mensaje' => 'No hay productos en el pedido.']);
         exit();
     }
 
     $metodoPago = trim($_POST['metodo_pago'] ?? '');
-
-    if ($metodoPago === '') {
-
-        echo json_encode([
-            'ok' => false,
-            'mensaje' => 'No se seleccionó el método de pago.'
-        ]);
-
+    if (!in_array($metodoPago, ['Efectivo'], true)) {
+        echo json_encode(['ok' => false, 'mensaje' => 'Por ahora solo está habilitado el pago en efectivo.']);
         exit();
     }
 
-    $idUsuario = (int)($_SESSION['id'] ?? 0);
-
+    // validar_login.php guarda el identificador del usuario en $_SESSION['id'].
+    $idUsuario = (int)($_SESSION['id'] ?? $_SESSION['id_usuario'] ?? 0);
     if ($idUsuario <= 0) {
-
-        echo json_encode([
-            'ok' => false,
-            'mensaje' => 'No se encontró el usuario de la sesión.'
-        ]);
-
+        echo json_encode(['ok' => false, 'mensaje' => 'La sesión no contiene un ID de usuario válido. Cierra sesión e ingresa nuevamente.']);
         exit();
     }
-
-    $subtotal = (float)$totalPedido;
-    $impuestos = 0;
-    $descuento = 0;
-    $total = (float)$totalPedido;
 
     mysqli_begin_transaction($conexion);
+    $stmtFactura = $stmtDetalle = $stmtStock = $stmtActualizar = $stmtMovimiento = $stmtNumero = null;
 
     try {
+        // Revalidar producto, estado, precio y stock en la base de datos; no confiar en el carrito del navegador.
+        $productosCompra = [];
+        $subtotal = 0.0;
+        $sqlStock = "SELECT nombre, precio, stock, estado FROM producto WHERE idProducto = ? FOR UPDATE";
+        $stmtStock = mysqli_prepare($conexion, $sqlStock);
+        if (!$stmtStock) {
+            throw new Exception('No se pudo preparar la validación de inventario: ' . mysqli_error($conexion));
+        }
 
-        /*
-        |--------------------------------------------------------------------------
-        | 1. CREAR FACTURA
-        |--------------------------------------------------------------------------
-        |
-        | numero_factura queda temporalmente NULL.
-        | MySQL genera primero id_factura mediante AUTO_INCREMENT.
-        |
-        */
+        foreach ($_SESSION['pedido'] as $item) {
+            $idProducto = (int)($item['idProducto'] ?? 0);
+            $cantidad = (int)($item['cantidad'] ?? 0);
+            if ($idProducto <= 0 || $cantidad <= 0) {
+                throw new Exception('El pedido contiene un producto o cantidad inválidos.');
+            }
+
+            mysqli_stmt_bind_param($stmtStock, 'i', $idProducto);
+            if (!mysqli_stmt_execute($stmtStock)) {
+                throw new Exception('No se pudo consultar el producto: ' . mysqli_stmt_error($stmtStock));
+            }
+            $resStock = mysqli_stmt_get_result($stmtStock);
+            $productoBD = $resStock ? mysqli_fetch_assoc($resStock) : null;
+            if (!$productoBD || strtolower((string)$productoBD['estado']) !== 'activo') {
+                throw new Exception('El producto ID ' . $idProducto . ' no existe o está inactivo.');
+            }
+
+            $stockAnterior = (int)$productoBD['stock'];
+            $precioUnitario = (float)$productoBD['precio'];
+            if ($stockAnterior < $cantidad) {
+                throw new Exception('Stock insuficiente para ' . $productoBD['nombre'] . '. Disponible: ' . $stockAnterior . ', solicitado: ' . $cantidad . '.');
+            }
+
+            $stockNuevo = $stockAnterior - $cantidad;
+            $subtotalProducto = round($precioUnitario * $cantidad, 2);
+            $subtotal += $subtotalProducto;
+            $productosCompra[] = [
+                'idProducto' => $idProducto,
+                'nombre' => (string)$productoBD['nombre'],
+                'cantidad' => $cantidad,
+                'precio' => $precioUnitario,
+                'subtotal' => $subtotalProducto,
+                'stockAnterior' => $stockAnterior,
+                'stockNuevo' => $stockNuevo
+            ];
+        }
+        mysqli_stmt_close($stmtStock);
+        $stmtStock = null;
+
+        $subtotal = round($subtotal, 2);
+        $impuestos = 0.00;
+        $descuento = 0.00;
+        $total = round($subtotal + $impuestos - $descuento, 2);
         $tokenFactura = bin2hex(random_bytes(32));
-        $sqlFactura = "
-            INSERT INTO factura (
-                numero_factura,
-                id_usuario,
-                subtotal,
-                impuestos,
-                descuento,
-                total,
-                metodo_pago,
-                estado,
-                token_factura
 
-            )
-            VALUES (
-                0,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                'generada',
-                ?
-            )
-        ";
-
-        $stmtFactura = mysqli_prepare(
-            $conexion,
-            $sqlFactura
-        );
-
+        // numero_factura es UNIQUE y acepta NULL: insertar NULL evita colisiones por insertar 0 repetidamente.
+        $sqlFactura = "INSERT INTO factura (numero_factura, id_usuario, subtotal, impuestos, descuento, total, metodo_pago, estado, token_factura) VALUES (NULL, ?, ?, ?, ?, ?, ?, 'pagada', ?)";        $stmtFactura = mysqli_prepare($conexion, $sqlFactura);
         if (!$stmtFactura) {
-            throw new Exception(
-                'No se pudo preparar la factura.'
-            );
+            throw new Exception('No se pudo preparar la factura: ' . mysqli_error($conexion));
         }
-
-        mysqli_stmt_bind_param(
-            $stmtFactura,
-            "iddddss",
-            $idUsuario,
-            $subtotal,
-            $impuestos,
-            $descuento,
-            $total,
-            $metodoPago,
-            $tokenFactura
-        );
-
+        mysqli_stmt_bind_param($stmtFactura, 'iddddss', $idUsuario, $subtotal, $impuestos, $descuento, $total, $metodoPago, $tokenFactura);
         if (!mysqli_stmt_execute($stmtFactura)) {
-
-            throw new Exception(
-                'No se pudo guardar la factura. MySQL: ' .
-                mysqli_stmt_error($stmtFactura)
-            );
+            throw new Exception('No se pudo guardar la factura: ' . mysqli_stmt_error($stmtFactura));
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | 2. OBTENER ID_FACTURA GENERADO POR MYSQL
-        |--------------------------------------------------------------------------
-        */
-
-        $idFactura = mysqli_insert_id($conexion);
-
+        $idFactura = (int)mysqli_insert_id($conexion);
         if ($idFactura <= 0) {
-
-            throw new Exception(
-                'No se pudo obtener el consecutivo de la factura.'
-            );
+            throw new Exception('MySQL no devolvió el ID de la factura.');
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | 3. GUARDAR DETALLE DE LA FACTURA
-        |--------------------------------------------------------------------------
-        */
-
-        $sqlDetalle = "
-            INSERT INTO detalle_factura (
-                id_factura,
-                idProducto,
-                cantidad,
-                precio_unitario,
-                subtotal
-            )
-            VALUES (?, ?, ?, ?, ?)
-        ";
-
-        $stmtDetalle = mysqli_prepare(
-            $conexion,
-            $sqlDetalle
-        );
-
+        $sqlDetalle = "INSERT INTO detalle_factura (id_factura, idProducto, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)";
+        $stmtDetalle = mysqli_prepare($conexion, $sqlDetalle);
         if (!$stmtDetalle) {
-            throw new Exception(
-                'No se pudo preparar el detalle de la factura.'
-            );
+            throw new Exception('No se pudo preparar el detalle de factura: ' . mysqli_error($conexion));
         }
 
-        foreach ($_SESSION['pedido'] as $producto) {
+        $sqlActualizar = "UPDATE producto SET stock = ? WHERE idProducto = ? AND stock = ?";
+        $stmtActualizar = mysqli_prepare($conexion, $sqlActualizar);
+        if (!$stmtActualizar) {
+            throw new Exception('No se pudo preparar la actualización de stock: ' . mysqli_error($conexion));
+        }
 
-            $idProducto = (int)(
-                $producto['idProducto'] ?? 0
-            );
+        $sqlMovimiento = "INSERT INTO movimiento_inventario (idProducto, tipoMovimiento, cantidad, stockAnterior, stockNuevo, motivo, observacion, idUsuario, moduloOrigen) VALUES (?, 'SALIDA', ?, ?, ?, ?, ?, ?, ?)";
+        $stmtMovimiento = mysqli_prepare($conexion, $sqlMovimiento);
+        if (!$stmtMovimiento) {
+            throw new Exception('No se pudo preparar el historial de inventario: ' . mysqli_error($conexion));
+        }
 
-            $cantidad = (int)(
-                $producto['cantidad'] ?? 0
-            );
+        $motivo = 'Venta por pedido de cliente';
+        $observacion = 'Factura #' . $idFactura;
+        $moduloOrigen = 'Cliente';
 
-            $precioUnitario = (float)(
-                $producto['precio'] ?? 0
-            );
+        foreach ($productosCompra as $p) {
+            $idProducto = $p['idProducto'];
+            $cantidad = $p['cantidad'];
+            $precioUnitario = $p['precio'];
+            $subtotalProducto = $p['subtotal'];
+            $stockAnterior = $p['stockAnterior'];
+            $stockNuevo = $p['stockNuevo'];
 
-            $subtotalProducto =
-                $cantidad * $precioUnitario;
-
-            if (
-                $idProducto <= 0 ||
-                $cantidad <= 0 ||
-                $precioUnitario < 0
-            ) {
-                throw new Exception(
-                    'Uno de los productos del pedido tiene datos inválidos.'
-                );
-            }
-
-            mysqli_stmt_bind_param(
-                $stmtDetalle,
-                "iiidd",
-                $idFactura,
-                $idProducto,
-                $cantidad,
-                $precioUnitario,
-                $subtotalProducto
-            );
-
+            mysqli_stmt_bind_param($stmtDetalle, 'iiidd', $idFactura, $idProducto, $cantidad, $precioUnitario, $subtotalProducto);
             if (!mysqli_stmt_execute($stmtDetalle)) {
-                throw new Exception(
-                    'No se pudo guardar un producto de la factura. MySQL: ' .
-                    mysqli_stmt_error($stmtDetalle)
-                );
+                throw new Exception('No se pudo guardar el detalle del producto ' . $p['nombre'] . ': ' . mysqli_stmt_error($stmtDetalle));
+            }
+
+            mysqli_stmt_bind_param($stmtActualizar, 'iii', $stockNuevo, $idProducto, $stockAnterior);
+            if (!mysqli_stmt_execute($stmtActualizar) || mysqli_stmt_affected_rows($stmtActualizar) !== 1) {
+                throw new Exception('No se pudo descontar el inventario de ' . $p['nombre'] . '.');
+            }
+
+            mysqli_stmt_bind_param($stmtMovimiento, 'iiiissis', $idProducto, $cantidad, $stockAnterior, $stockNuevo, $motivo, $observacion, $idUsuario, $moduloOrigen);
+            if (!mysqli_stmt_execute($stmtMovimiento)) {
+                throw new Exception('No se pudo registrar el movimiento de ' . $p['nombre'] . ': ' . mysqli_stmt_error($stmtMovimiento));
             }
         }
 
-        mysqli_stmt_close($stmtDetalle);
-
-        /*
-        |--------------------------------------------------------------------------
-        | 4. USAR ID_FACTURA COMO NUMERO_FACTURA
-        |--------------------------------------------------------------------------
-        */
-
-        $sqlNumero = "
-            UPDATE factura
-            SET numero_factura = ?
-            WHERE id_factura = ?
-        ";
-
-        $stmtNumero = mysqli_prepare(
-            $conexion,
-            $sqlNumero
-        );
-
+        // El ID autoincremental se usa como consecutivo visible.
+        $sqlNumero = "UPDATE factura SET numero_factura = ? WHERE id_factura = ?";
+        $stmtNumero = mysqli_prepare($conexion, $sqlNumero);
         if (!$stmtNumero) {
-            throw new Exception(
-                'No se pudo preparar el consecutivo.'
-            );
+            throw new Exception('No se pudo preparar el consecutivo de factura: ' . mysqli_error($conexion));
         }
-
-        mysqli_stmt_bind_param(
-            $stmtNumero,
-            "ii",
-            $idFactura,
-            $idFactura
-        );
-
+        mysqli_stmt_bind_param($stmtNumero, 'ii', $idFactura, $idFactura);
         if (!mysqli_stmt_execute($stmtNumero)) {
-
-            throw new Exception(
-                'No se pudo asignar el consecutivo. MySQL: ' .
-                mysqli_stmt_error($stmtNumero)
-            );
+            throw new Exception('No se pudo asignar el número de factura: ' . mysqli_stmt_error($stmtNumero));
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | 5. CONFIRMAR TRANSACCIÓN
-        |--------------------------------------------------------------------------
-        */
 
         mysqli_commit($conexion);
 
-        mysqli_stmt_close($stmtFactura);
-        mysqli_stmt_close($stmtNumero);
+        foreach ([$stmtFactura, $stmtDetalle, $stmtActualizar, $stmtMovimiento, $stmtNumero] as $stmtCerrar) {
+            if ($stmtCerrar instanceof mysqli_stmt) {
+                mysqli_stmt_close($stmtCerrar);
+            }
+        }
 
-        /*
-        |--------------------------------------------------------------------------
-        | 6. RESPUESTA
-        |--------------------------------------------------------------------------
-        */
+        // Vaciar el carrito solo después de que factura, detalle, stock e historial se hayan confirmado.
+        $_SESSION['pedido'] = [];
+        session_write_close();
 
         echo json_encode([
             'ok' => true,
             'idFactura' => $idFactura,
-            'numeroFactura' => str_pad(
-                $idFactura,
-                7,
-                '0',
-                STR_PAD_LEFT
-            ),
+            'numeroFactura' => str_pad((string)$idFactura, 7, '0', STR_PAD_LEFT),
             'tokenFactura' => $tokenFactura,
-            'mensaje' => 'Factura generada correctamente.'
-        ]);
-
+            'mensaje' => 'Factura generada y compra registrada correctamente.',
+            'urlMisPedidos' => 'Mis_Pedidos.php'
+        ], JSON_UNESCAPED_UNICODE);
         exit();
 
     } catch (Throwable $e) {
-
         mysqli_rollback($conexion);
-
+        foreach ([$stmtFactura, $stmtDetalle, $stmtStock, $stmtActualizar, $stmtMovimiento, $stmtNumero] as $stmtCerrar) {
+            if ($stmtCerrar instanceof mysqli_stmt) {
+                mysqli_stmt_close($stmtCerrar);
+            }
+        }
+        error_log('Error al confirmar pedido Sabora: ' . $e->getMessage());
+        http_response_code(500);
         echo json_encode([
             'ok' => false,
-            'mensaje' => $e->getMessage()
-        ]);
-
+            'mensaje' => 'No se pudo completar la compra. ' . $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE);
         exit();
     }
 }
@@ -2625,15 +2528,7 @@ if (formularioPago) {
         }
     })
     .then(function(respuesta) {
-
-        if (!respuesta.ok) {
-            throw new Error(
-                'Error HTTP ' + respuesta.status
-            );
-        }
-
         return respuesta.json();
-
     })
     .then(function(datos) {
 
