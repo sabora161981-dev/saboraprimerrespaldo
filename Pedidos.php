@@ -333,7 +333,7 @@ if (
         $tokenFactura = bin2hex(random_bytes(32));
 
         // numero_factura es UNIQUE y acepta NULL: insertar NULL evita colisiones por insertar 0 repetidamente.
-        $sqlFactura = "INSERT INTO factura (numero_factura, id_usuario, subtotal, impuestos, descuento, total, metodo_pago, estado, token_factura) VALUES (NULL, ?, ?, ?, ?, ?, ?, 'pagada', ?)";        $stmtFactura = mysqli_prepare($conexion, $sqlFactura);
+        $sqlFactura = "INSERT INTO factura (numero_factura, id_usuario, subtotal, impuestos, descuento, total, metodo_pago, estado, token_factura) VALUES (NULL, ?, ?, ?, ?, ?, ?, 'generada', ?)";        $stmtFactura = mysqli_prepare($conexion, $sqlFactura);
         if (!$stmtFactura) {
             throw new Exception('No se pudo preparar la factura: ' . mysqli_error($conexion));
         }
@@ -420,7 +420,7 @@ if (
             'idFactura' => $idFactura,
             'numeroFactura' => str_pad((string)$idFactura, 7, '0', STR_PAD_LEFT),
             'tokenFactura' => $tokenFactura,
-            'mensaje' => 'Factura generada y compra registrada correctamente.',
+            'mensaje' => 'Factura generada correctamente. El pago queda pendiente de confirmación por el cajero o administrador.',
             'urlMisPedidos' => 'Mis_Pedidos.php'
         ], JSON_UNESCAPED_UNICODE);
         exit();
