@@ -452,7 +452,8 @@ try {
             </p>
         </div>
 
-        <a href="Inventario.php" class="boton">Volver a Inventario</a>
+        ```html
+<a href="Administrador.php" class="boton">Volver al panel de administración</a>
     </header>
 
     <section class="tarjeta filtros-tarjeta">

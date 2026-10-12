@@ -1,14 +1,7 @@
 <?php
 
-
-
 session_start();
-
-
-
 require_once "conexion.php";
-
-
 
 /*
 
@@ -20,8 +13,6 @@ require_once "conexion.php";
 
 */
 
-
-
 if (!isset($_SESSION['correo'])) {
 
     header("Location: Cajero.html");
@@ -29,8 +20,6 @@ if (!isset($_SESSION['correo'])) {
     exit();
 
 }
-
-
 
 if (strtolower(trim($_SESSION['rol'] ?? '')) !== 'cajero') {
 
@@ -82,8 +71,6 @@ function e($valor): string
 
 }
 
-
-
 function dinero($valor): string
 
 {
@@ -114,13 +101,9 @@ function dinero($valor): string
 
 */
 
-
-
 $mensaje = '';
 
 $tipoMensaje = '';
-
-
 
 /*
 
@@ -211,7 +194,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     |--------------------------------------------------------------------------
 
     */
-
 
 
     } else {
@@ -1637,7 +1619,15 @@ if ($resultadoProductos) {
 
 <style>
 
-
+/* CENTRAR EL PIE DE PÁGINA */
+footer {
+    width: 100%;
+    text-align: center;
+    padding: 25px 15px;
+    color: #666;
+    margin-top: 20px;
+    line-height: 1.8;
+}
 
 *{
 
@@ -2325,7 +2315,7 @@ input:focus{
 
 .btn-cancelar{
 
-    background:#777;
+    background:#ff6b35;
 
     color:white;
 
@@ -2343,33 +2333,25 @@ input:focus{
 
 }
 
-
-
 .btn-venta:hover{
 
-    background:#e95d2d;
+    background:#e85a2a;
 
 }
-
-
 
 .btn-venta:disabled{
 
-    background:#aaa;
-
+    background:#ffb08f;
+    color: white;
     cursor:not-allowed;
-
+    
 }
-
-
 
 /*========================
 
        INFORMACIÓN
 
 \========================*/
-
-
 
 .info{
 
@@ -2389,22 +2371,17 @@ input:focus{
 
 }
 
-
-
 .info strong{
 
     color:#333;
 
 }
 
-
-
 /*========================
 
        RESPONSIVE
 
 \========================*/
-
 
 
 @media(max-width:900px){
@@ -2420,7 +2397,40 @@ input:focus{
 
 
 }
+/* =====================================================
+   DISEÑO RESPONSIVE PARA DISPOSITIVOS MÓVILES
 
+   @media permite aplicar estilos CSS cuando se cumple
+   una condición relacionada con la pantalla.
+
+   max-width: 600px significa que estas reglas se
+   aplican cuando el área de visualización mide
+   600 píxeles de ancho o menos.
+
+   Objetivo: adaptar el módulo de ventas de Sabora
+   para facilitar su uso desde celulares.
+===================================================== */
+
+@media (max-width: 600px) {
+
+    /* Muestra los productos en una sola columna
+       para aprovechar el espacio de la pantalla. */
+    .productos {
+        grid-template-columns: 1fr;
+    }
+
+    /* Organiza los datos de cada producto del carrito
+       verticalmente para evitar que se amontonen. */
+    .carrito-item {
+        grid-template-columns: 1fr;
+    }
+
+    /* Apila los botones para facilitar su selección
+       con los dedos en pantallas pequeñas. */
+    .botones {
+        flex-direction: column;
+    }
+}
 
 
 @media(max-width:600px){
@@ -2453,15 +2463,11 @@ input:focus{
 
     }
 
-
-
     .carrito-item{
 
         grid-template-columns:1fr;
 
     }
-
-
 
     .item-subtotal{
 
@@ -2469,15 +2475,11 @@ input:focus{
 
     }
 
-
-
     .botones{
 
         flex-direction:column;
 
     }
-
-
 
 }
 
@@ -2597,7 +2599,7 @@ Registre una venta directamente desde el módulo de caja.
 
     onsubmit="return prepararVenta();"
 
-\>
+>
 
 
 
@@ -2641,7 +2643,7 @@ Seleccionar cliente
 
     required
 
-\>
+>
 
 
 
@@ -2661,7 +2663,7 @@ Seleccionar cliente
 
     value="<?= (int)$cliente['id'] ?>"
 
-\>
+>
 
 
 
@@ -2733,7 +2735,7 @@ Seleccionar cliente
 
     autocomplete="off"
 
-\>
+>
 
 
 
@@ -2749,7 +2751,7 @@ Seleccionar cliente
 
     id="listaProductos"
 
-\>
+>
 
 
 
@@ -2789,7 +2791,7 @@ No hay productos activos disponibles.
 
     ) ?>"
 
-\>
+>
 
 
 
@@ -2867,7 +2869,7 @@ Stock:
 
     )"
 
-\>
+>
 
 
 
@@ -2931,7 +2933,7 @@ Agregar
 
     id="carrito"
 
-\>
+>
 
 
 
@@ -3067,7 +3069,7 @@ Método de pago
 
     required
 
-\>
+>
 
 
 
@@ -3141,7 +3143,7 @@ la venta.
 
     id="carritoInput"
 
-\>
+>
 
 
 
@@ -3157,7 +3159,7 @@ la venta.
 
     class="btn btn-cancelar"
 
-\>
+>
 
 Cancelar
 
@@ -3175,7 +3177,7 @@ Cancelar
 
     disabled
 
-\>
+>
 
 Registrar Venta
 
@@ -3496,9 +3498,6 @@ function cambiarCantidad(
 }
 
 
-
-
-
 /*
 
 |--------------------------------------------------------------------------
@@ -3508,8 +3507,6 @@ function cambiarCantidad(
 |--------------------------------------------------------------------------
 
 */
-
-
 
 function eliminarProducto(idProducto)
 
@@ -3534,10 +3531,6 @@ function eliminarProducto(idProducto)
     renderCarrito();
 
 }
-
-
-
-
 
 /*
 
@@ -3601,7 +3594,7 @@ function renderCarrito()
 
 
 
-        contenedor.innerHTML = \`
+        contenedor.innerHTML = `
 
             <div class="carrito-vacio">
 
@@ -3609,9 +3602,7 @@ function renderCarrito()
 
             </div>
 
-        \`;
-
-
+        `;
 
         subtotalElemento.textContent =
 
@@ -3635,19 +3626,9 @@ function renderCarrito()
 
     }
 
-
-
-
-
     let subtotal = 0;
 
-
-
     let html = '';
-
-
-
-
 
     carrito.forEach(
 
@@ -3669,7 +3650,7 @@ function renderCarrito()
 
 
 
-            html += \`
+            html += `
 
 
 
@@ -3707,13 +3688,7 @@ function renderCarrito()
 
                     </div>
 
-
-
-
-
                     <div class="cantidad-control">
-
-
 
                         <button
 
@@ -3770,9 +3745,6 @@ function renderCarrito()
                     </div>
 
 
-
-
-
                     <div class="item-subtotal">
 
 
@@ -3815,14 +3787,11 @@ function renderCarrito()
 
 
 
-            \`;
+            `;
 
         }
 
     );
-
-
-
 
 
     contenedor.innerHTML =
@@ -3850,9 +3819,6 @@ function renderCarrito()
 }
 
 
-
-
-
 /*
 
 |--------------------------------------------------------------------------
@@ -3862,8 +3828,6 @@ function renderCarrito()
 |--------------------------------------------------------------------------
 
 */
-
-
 
 function prepararVenta()
 
@@ -3949,10 +3913,6 @@ function prepararVenta()
 
     }
 
-
-
-
-
     /*
 
     |--------------------------------------------------------------------------
@@ -3970,8 +3930,6 @@ function prepararVenta()
     |
 
     */
-
-
 
     const carritoSeguro =
 
@@ -4053,10 +4011,6 @@ function prepararVenta()
 
 }
 
-
-
-
-
 /*
 
 |--------------------------------------------------------------------------
@@ -4066,8 +4020,6 @@ function prepararVenta()
 |--------------------------------------------------------------------------
 
 */
-
-
 
 function escapeHTML(texto)
 
@@ -4094,10 +4046,6 @@ function escapeHTML(texto)
     return div.innerHTML;
 
 }
-
-
-
-
 
 /*
 
@@ -4208,11 +4156,14 @@ document
 
 
 </script>
-
-
+<footer>
+    <strong>Sistema de Gestión Restaurante SABORA</strong>
+    <br>
+    Módulo de venta cajero.
+    <br>
+    &copy; <?= date('Y') ?> - Todos los derechos reservados.
+</footer>
 
 </body>
-
-
 
 </html>

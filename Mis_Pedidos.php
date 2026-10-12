@@ -712,7 +712,7 @@ if ($nombreCompleto === '') {
     <?php endif; ?>
 
     <footer class="pie">
-        Sistema de Gestión Restaurante <strong>SABORA</strong><br>
+        <strong>Sistema de Gestión Restaurante SABORA</strong><br>
         Panel exclusivo para Clientes.<br>
         © 2026 - Todos los derechos reservados.
     </footer>

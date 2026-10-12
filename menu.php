@@ -2132,52 +2132,58 @@ $resultado = mysqli_query(
  * ================================================================
  */
 
-const botonesCategoria =
-    document.querySelectorAll('.categoria');
 
-const productos =
-    document.querySelectorAll('.producto');
+/* =====================================================
+   FILTRO DE CATEGORÍAS
+===================================================== */
 
+const botonesCategoria = document.querySelectorAll('.categoria');
+const productos = document.querySelectorAll('.producto');
+
+// Normalizar categorías para ignorar tildes y diferencias
+// entre "Adición" y "Adiciones".
+function normalizarCategoria(categoria) {
+    let texto = String(categoria || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    // Unificar singular y plural de Adición.
+    if (texto.startsWith('adicion')) {
+        return 'adicion';
+    }
+
+    return texto;
+}
 
 botonesCategoria.forEach(function(boton) {
 
     boton.addEventListener('click', function() {
 
         const categoriaSeleccionada =
-            this.dataset.categoria;
+            normalizarCategoria(this.dataset.categoria);
 
-
-        /*
-         * Mostrar u ocultar productos
-         */
         productos.forEach(function(producto) {
 
-            const categoriaProducto =
-                producto.dataset.categoria;
+            const categoriaProducto = normalizarCategoria(
+                producto.dataset.categoria
+            );
 
             if (
                 categoriaSeleccionada === 'todos' ||
                 categoriaProducto === categoriaSeleccionada
             ) {
-
                 producto.style.display = '';
-
             } else {
-
                 producto.style.display = 'none';
-
             }
 
         });
 
-
-        /*
-         * Cambiar botón activo
-         */
+        // Actualizar botón activo.
         botonesCategoria.forEach(function(btn) {
-
             btn.classList.remove('activo');
-
         });
 
         this.classList.add('activo');
@@ -2185,6 +2191,7 @@ botonesCategoria.forEach(function(boton) {
     });
 
 });
+
     </script>
 
 </body>

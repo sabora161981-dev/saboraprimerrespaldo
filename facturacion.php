@@ -281,6 +281,60 @@ function urlValidacion($token): string {
 <title>Facturación - Saborá</title>
 
 <style>
+ .btn-volver {
+    display: inline-flex;
+    background: #333333;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 700;
+    transition: background .2s;
+}
+
+.btn-volver:hover {
+    background: #555;
+    color: #fff;
+} 
+.titulo-encabezado {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.titulo-encabezado h2 {
+    margin: 0;
+}
+.contenedor-volver {
+    display: flex;
+    justify-content: flex-end;
+    margin: -5px 0 20px;
+}
+.btn-volver {
+    display: inline-block;
+    background: #ff6b35;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.btn-volver:hover {
+    background: #ff6b35;
+    color: #fff;
+}
+
+@media (max-width: 600px) {
+    .titulo-encabezado {
+        align-items: flex-start;
+    }
+}
+
+
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',sans-serif}
 body{background:#efe7e2;color:#222}
 header{background:#ff6b35;color:#fff;padding:18px 5%;display:flex;justify-content:space-between;align-items:center;gap:20px}
@@ -355,13 +409,29 @@ footer{text-align:center;color:#666;margin:35px}
 
 <div class="container">
 
-    <section class="titulo">
+    
+<section class="titulo">
+    <div class="titulo-encabezado">
         <h2>🧾 Facturación</h2>
-        <p>
-            Facturas generadas por los clientes y disponibles para gestión del cajero.
-            No se crean facturas duplicadas: esta pantalla consulta la misma factura almacenada en el sistema.
-        </p>
-    </section>
+    </div>
+
+    <p>
+        Facturas generadas por los clientes y disponibles para gestión del cajero.
+        No se crean facturas duplicadas: esta pantalla consulta la misma factura
+        almacenada en el sistema.
+    </p>
+</section>
+
+<div class="contenedor-volver">
+    <a href="Cajero.php"
+       class="btn-volver"
+       aria-label="Volver al panel del cajero"
+       title="Volver al panel del cajero">
+        <span class="flecha-volver">←</span>
+        <span class="texto-volver">Volver al panel del cajero</span>
+    </a>
+</div>
+
 
     <?php if ($mensaje !== ''): ?>
         <div class="mensaje <?= e($tipoMensaje) ?>">
@@ -545,8 +615,10 @@ footer{text-align:center;color:#666;margin:35px}
 </div>
 
 <footer>
-    <strong>Sistema de Gestión Restaurante SABORA</strong><br><br>
+    <strong>Sistema de Gestión Restaurante SABORA</strong><br>
     Módulo de Facturación - Cajero
+    <br>
+    &copy; <?= date('Y') ?> - Todos los derechos reservados.
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
